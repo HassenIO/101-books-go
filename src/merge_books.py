@@ -894,6 +894,73 @@ def make_page_number_stamp(
     return _page_reader(buf)
 
 
+def make_book_tab_stamp(
+    width: float,
+    height: float,
+    *,
+    side: str,
+    y_bottom: float,
+    tab_h: float,
+    tab_w: float,
+    color: HexColor,
+) -> PdfReader:
+    """Colored edge tab (thumb index) on the outer margin."""
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(width, height))
+    c.setFillColor(color)
+    x = width - tab_w if side == "right" else 0
+    c.rect(x, y_bottom, tab_w, tab_h, fill=1, stroke=0)
+    c.save()
+    return _page_reader(buf)
+
+
+def stamp_book_tabs(
+    writer: PdfWriter,
+    book_ranges: list[tuple[int, int]],
+    *,
+    front_matter: int,
+    color: HexColor,
+) -> None:
+    """Stamp staggered edge tabs; one vertical slot per book section."""
+    if not book_ranges:
+        return
+    n = len(book_ranges)
+    print(f"Stamping book tabs ({n} sections) ...")
+    # Sample page size from first content page.
+    sample = writer.pages[front_matter] if front_matter < len(writer.pages) else writer.pages[0]
+    width = float(sample.mediabox.width)
+    height = float(sample.mediabox.height)
+
+    margin_top = 36 * mm
+    margin_bottom = 36 * mm
+    usable = height - margin_top - margin_bottom
+    slot = usable / n
+    tab_h = min(30 * mm, max(14 * mm, slot * 0.78))
+    tab_w = 4.5 * mm
+
+    for bi, (start, end) in enumerate(book_ranges):
+        # Top → bottom stacking.
+        y_top = height - margin_top - bi * slot
+        y_bottom = y_top - tab_h
+        # Keep tab inside usable band if slot is large.
+        if y_bottom < margin_bottom:
+            y_bottom = margin_bottom
+            y_top = y_bottom + tab_h
+        for i in range(start, end):
+            if i < front_matter or i >= len(writer.pages):
+                continue
+            page_num = i - front_matter + 1  # printed content number
+            # Outer edge: recto (odd) right, verso (even) left.
+            side = "right" if page_num % 2 == 1 else "left"
+            page = writer.pages[i]
+            w = float(page.mediabox.width)
+            h = float(page.mediabox.height)
+            stamp = make_book_tab_stamp(
+                w, h, side=side, y_bottom=y_bottom, tab_h=tab_h, tab_w=tab_w, color=color
+            )
+            page.merge_page(stamp.pages[0])
+
+
 def stamp_continuous_page_numbers(
     writer: PdfWriter,
     source_pages: set[int],
@@ -984,16 +1051,31 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
         cat["category"]: [] for cat in catalog["categories"]
     }
     cat_first_page: dict[str, int] = {}
+    # Book sections for edge tabs: (start_page, end_page exclusive)
+    book_ranges: list[tuple[int, int]] = []
+    range_key: tuple[str, str] | None = None
+    range_start = 0
+
+    def _close_book_range(end: int) -> None:
+        nonlocal range_key, range_start
+        if range_key is not None and end > range_start:
+            book_ranges.append((range_start, end))
+        range_key = None
 
     for i, (cat, book, pdf, path) in enumerate(all_parts):
         pdfs = book.get("pdfs") or []
         multi = len(pdfs) > 1
         rel = pdf["file"]
+        key = (cat["category"], book["title"])
         try:
             reader = PdfReader(str(path))
             if reader.is_encrypted:
                 reader.decrypt("")
             start = len(writer.pages)
+            if key != range_key:
+                _close_book_range(start)
+                range_key = key
+                range_start = start
             part_url = pdf.get("url")
             subtitle = None
             try:
@@ -1018,7 +1100,6 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
             source_pages.update(range(start, len(writer.pages)))
             print(f"  [OK] {rel} ({len(reader.pages)} pages)")
 
-            key = (cat["category"], book["title"])
             if key not in outline_books:
                 rank_display = format_rank_range(
                     [p.get("rank") for p in pdfs]
@@ -1039,6 +1120,8 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
         if i < n_parts - 1:
             writer.add_page(make_blank_page().pages[0])
 
+    _close_book_range(len(writer.pages))
+
     for cat in catalog["categories"]:
         name = cat["category"]
         if name in cat_first_page:
@@ -1052,6 +1135,12 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
         front_matter=front_matter,
         title_pages=title_pages,
         title_number_color=part_fg,
+    )
+    stamp_book_tabs(
+        writer,
+        book_ranges,
+        front_matter=front_matter,
+        color=part_bg,
     )
     add_toc_links(writer, toc_start, toc_links)
 
