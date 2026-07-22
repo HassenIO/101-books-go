@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ContentStream
-from reportlab.lib.colors import HexColor, white
+from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
@@ -237,7 +237,7 @@ def _pdf_page_count(path: Path) -> int:
 
 def plan_pages(catalog: dict, root: Path, toc_pages: int) -> tuple[list[dict], int]:
     """Return TOC entries with 0-based page indices and total page count."""
-    # layout: [cover][toc x N][categories/books/pdfs...]
+    # layout: [cover][toc x N][source PDFs only — no category/book separators]
     idx = 1 + toc_pages
     entries: list[dict] = []
     missing: list[str] = []
@@ -246,20 +246,18 @@ def plan_pages(catalog: dict, root: Path, toc_pages: int) -> tuple[list[dict], i
         cat_entry = {
             "kind": "category",
             "title": cat["category"],
-            "page_index": idx,
+            "page_index": idx,  # first content page in this category
             "books": [],
         }
-        idx += 1  # category separator
 
         for book in cat["books"]:
             pdfs = book.get("pdfs") or []
             book_entry = {
                 "kind": "book",
                 "title": book["title"],
-                "page_index": idx,
+                "page_index": idx,  # first part / PDF of the book
                 "parts": [],
             }
-            idx += 1  # book separator
             for pdf in pdfs:
                 path = root / pdf["file"]
                 if not path.exists():
@@ -274,8 +272,16 @@ def plan_pages(catalog: dict, root: Path, toc_pages: int) -> tuple[list[dict], i
                         "page_index": part_page,
                     }
                 )
+            if book_entry["parts"]:
+                book_entry["page_index"] = book_entry["parts"][0]["page_index"]
             cat_entry["books"].append(book_entry)
 
+        if cat_entry["books"]:
+            first_book = next(
+                (b for b in cat_entry["books"] if b.get("parts")),
+                cat_entry["books"][0],
+            )
+            cat_entry["page_index"] = first_book["page_index"]
         entries.append(cat_entry)
 
     if missing:
@@ -324,9 +330,10 @@ def format_rank_range(ranks: list[str | None]) -> str | None:
     return f"{format_rank(lo)} – {format_rank(hi)}"
 
 
-def make_toc(entries: list[dict]) -> tuple[PdfReader, list[dict]]:
+def make_toc(entries: list[dict], toc_pages: int) -> tuple[PdfReader, list[dict]]:
     """Build TOC pages with dotted leaders and page numbers.
 
+    Content page numbers start at 1 after cover + TOC (``toc_pages`` TOC sheets).
     Returns the TOC reader and link hit-areas:
     ``{toc_page_index, rect, target_page_index}`` (TOC-local page index).
     """
@@ -337,6 +344,9 @@ def make_toc(entries: list[dict]) -> tuple[PdfReader, list[dict]]:
     right = PAGE_W - 25 * mm
     page_col = right
     title_max = right - 18 * mm
+    # absolute index i → printed page i - toc_pages (content starts at 1)
+    def printed_page(abs_index: int) -> int:
+        return abs_index - toc_pages
 
     def new_toc_page(first: bool) -> float:
         if not first:
@@ -381,97 +391,81 @@ def make_toc(entries: list[dict]) -> tuple[PdfReader, list[dict]]:
         c.setFont("Helvetica", 10)
         c.drawString(num_x, y, page_label)
 
+    def draw_entry(
+        y: float,
+        toc_page: int,
+        main_text: str,
+        rank_text: str | None,
+        target: int,
+    ) -> tuple[float, int]:
+        """One TOC row: main title (+ optional gray rank) … page number."""
+        y, toc_page = ensure_space(y, 20 * mm, toc_page)
+        main_font, main_size = "Helvetica", 10
+        rank_font, rank_size = "Helvetica", 8
+        c.setFont(main_font, main_size)
+        max_main = title_max - left - 5 * mm
+        if rank_text:
+            max_main -= c.stringWidth(f"  {rank_text}", rank_font, rank_size) + 4
+        label = main_text
+        while label and c.stringWidth(label, main_font, main_size) > max_main:
+            label = label[:-2] + "…"
+
+        c.setFillColor(INK)
+        x = left
+        c.drawString(x, y, label)
+        text_end = x + c.stringWidth(label, main_font, main_size)
+        if rank_text:
+            gap = 5
+            c.setFillColor(MUTED)
+            c.setFont(rank_font, rank_size)
+            # Align rank near the main baseline.
+            c.drawString(text_end + gap, y + 0.5, rank_text)
+            text_end = text_end + gap + c.stringWidth(rank_text, rank_font, rank_size)
+
+        page_label = str(printed_page(target))
+        draw_leader(y, text_end, page_label)
+        links.append(
+            {
+                "toc_page": toc_page,
+                "rect": (left, y - 2, right, y + 11),
+                "target": target,
+            }
+        )
+        return y - 5.8 * mm, toc_page
+
     toc_page = 0
     y = new_toc_page(first=True)
 
     for cat in entries:
-        y, toc_page = ensure_space(y, 30 * mm, toc_page)
-
-        # Category heading
-        c.setFillColor(ACCENT)
-        c.setFont("Helvetica-Bold", 13)
-        cat_label = cat["title"]
-        c.drawString(left, y, cat_label)
-        cat_end = left + c.stringWidth(cat_label, "Helvetica-Bold", 13)
-        page_label = str(cat["page_index"] + 1)
-        draw_leader(y, cat_end, page_label)
-
-        # hit area for category
-        links.append(
-            {
-                "toc_page": toc_page,
-                "rect": (left, y - 2, right, y + 12),
-                "target": cat["page_index"],
-            }
-        )
-        y -= 7.5 * mm
-
         for book in cat["books"]:
             parts = book.get("parts") or []
-            multi = len(parts) > 1
-            # Leave room for part rows when the book is multi-volume.
-            need = 22 * mm + (len(parts) * 5.2 * mm if multi else 0)
-            y, toc_page = ensure_space(y, min(need, 40 * mm), toc_page)
-
-            rank_text = format_rank_range([p.get("rank") for p in parts])
             title = book["title"]
-            label = f"{title} ({rank_text})" if rank_text else title
-
-            c.setFont("Helvetica", 10)
-            max_label_w = title_max - left - 5 * mm
-            while label and c.stringWidth(label, "Helvetica", 10) > max_label_w:
-                label = label[:-2] + "…"
-
-            c.setFillColor(INK)
-            book_x = left + 5 * mm
-            c.drawString(book_x, y, label)
-            text_end = book_x + c.stringWidth(label, "Helvetica", 10)
-            page_label = str(book["page_index"] + 1)
-            draw_leader(y, text_end, page_label)
-
-            links.append(
-                {
-                    "toc_page": toc_page,
-                    "rect": (left, y - 2, right, y + 11),
-                    "target": book["page_index"],
-                }
-            )
-            y -= 5.8 * mm
+            multi = len(parts) > 1
 
             if multi:
                 for part in parts:
-                    y, toc_page = ensure_space(y, 20 * mm, toc_page)
                     raw = part.get("label")
                     if raw is None or str(raw).strip() == "":
-                        part_core = "Part"
-                    elif str(raw).lower().startswith("part"):
-                        part_core = str(raw)
+                        part_no = ""
                     else:
-                        part_core = f"Part {raw}"
-                    part_rank = format_rank(part.get("rank"))
-                    part_label = (
-                        f"{part_core} ({part_rank})" if part_rank else part_core
+                        part_no = str(raw).strip()
+                        if part_no.lower().startswith("part"):
+                            part_no = part_no[4:].strip()
+                    main = f"{title}: {part_no}" if part_no else f"{title}:"
+                    rank_text = format_rank(part.get("rank"))
+                    y, toc_page = draw_entry(
+                        y, toc_page, main, rank_text, part["page_index"]
                     )
-
-                    c.setFont("Helvetica", 9)
-                    c.setFillColor(MUTED)
-                    part_x = left + 12 * mm
-                    c.drawString(part_x, y, part_label)
-                    text_end = part_x + c.stringWidth(part_label, "Helvetica", 9)
-                    page_label = str(part["page_index"] + 1)
-                    # Leaders/numbers stay 10pt for alignment with book rows.
-                    draw_leader(y, text_end, page_label)
-
-                    links.append(
-                        {
-                            "toc_page": toc_page,
-                            "rect": (left + 8 * mm, y - 2, right, y + 10),
-                            "target": part["page_index"],
-                        }
-                    )
-                    y -= 5.2 * mm
-
-        y -= 3.5 * mm
+            elif parts:
+                part = parts[0]
+                rank_text = format_rank(part.get("rank"))
+                y, toc_page = draw_entry(
+                    y, toc_page, title, rank_text, part["page_index"]
+                )
+            else:
+                y, toc_page = draw_entry(
+                    y, toc_page, title, None, book["page_index"]
+                )
 
     c.showPage()
     c.save()
@@ -489,95 +483,6 @@ def add_toc_links(writer: PdfWriter, toc_start: int, links: list[dict]) -> None:
             continue
         annot = Link(rect=link["rect"], target_page_index=target_idx)
         writer.add_annotation(page_number=toc_idx, annotation=annot)
-
-
-def make_category_page(
-    name: str,
-    book_count: int,
-    pdf_count: int,
-    *,
-    background: HexColor | None = None,
-    foreground: HexColor | None = None,
-) -> PdfReader:
-    """Cream page with a mid-page banner; banner uses cover colors when set."""
-    c, buf = _new_page()
-    band = background if background is not None else ACCENT
-    text = foreground if foreground is not None else white
-
-    c.setFillColor(band)
-    c.rect(0, PAGE_H / 2 - 28 * mm, PAGE_W, 56 * mm, fill=1, stroke=0)
-
-    c.setFillColor(text)
-    c.setFont("Helvetica-Bold", 42)
-    c.drawCentredString(PAGE_W / 2, PAGE_H / 2 + 2 * mm, name)
-
-    c.setFont("Helvetica", 12)
-    c.drawCentredString(
-        PAGE_W / 2,
-        PAGE_H / 2 - 14 * mm,
-        f"{book_count} books  ·  {pdf_count} volumes",
-    )
-
-    c.showPage()
-    c.save()
-    return _page_reader(buf)
-
-
-def make_book_page(
-    title: str,
-    rank_display: str | None,
-    parts: int,
-    category: str,
-) -> PdfReader:
-    c, buf = _new_page()
-
-    c.setFillColor(MUTED)
-    c.setFont("Helvetica", 11)
-    c.drawCentredString(PAGE_W / 2, PAGE_H - 30 * mm, category.upper())
-
-    c.setStrokeColor(RULE)
-    c.setLineWidth(0.8)
-    c.line(40 * mm, PAGE_H - 36 * mm, PAGE_W - 40 * mm, PAGE_H - 36 * mm)
-
-    c.setFillColor(INK)
-    c.setFont("Helvetica-Bold", 26)
-    # wrap long titles
-    max_w = PAGE_W - 50 * mm
-    words = title.split()
-    lines: list[str] = []
-    cur = ""
-    for w in words:
-        trial = f"{cur} {w}".strip()
-        if c.stringWidth(trial, "Helvetica-Bold", 26) <= max_w:
-            cur = trial
-        else:
-            if cur:
-                lines.append(cur)
-            cur = w
-    if cur:
-        lines.append(cur)
-    if not lines:
-        lines = [title]
-
-    y = PAGE_H * 0.55 + (len(lines) - 1) * 8 * mm
-    for line in lines:
-        c.drawCentredString(PAGE_W / 2, y, line)
-        y -= 16 * mm
-
-    if rank_display:
-        c.setFillColor(ACCENT)
-        c.setFont("Helvetica-Bold", 16)
-        c.drawCentredString(PAGE_W / 2, y - 4 * mm, rank_display)
-        y -= 14 * mm
-
-    if parts > 1:
-        c.setFillColor(MUTED)
-        c.setFont("Helvetica", 12)
-        c.drawCentredString(PAGE_W / 2, y - 4 * mm, f"{parts} parts")
-
-    c.showPage()
-    c.save()
-    return _page_reader(buf)
 
 
 def append_reader(writer: PdfWriter, reader: PdfReader) -> int:
@@ -742,24 +647,33 @@ def make_page_number_stamp(
     return _page_reader(buf)
 
 
-def stamp_continuous_page_numbers(writer: PdfWriter, source_pages: set[int]) -> None:
-    """Renumber the whole volume 1..N with verso/recto header placement."""
+def stamp_continuous_page_numbers(
+    writer: PdfWriter,
+    source_pages: set[int],
+    *,
+    front_matter: int,
+) -> None:
+    """Renumber content pages 1..N; leave cover/TOC unnumbered."""
     total = len(writer.pages)
-    print(f"Stamping continuous page numbers (1–{total}) ...")
+    content_count = max(0, total - front_matter)
+    print(f"Stamping continuous page numbers (1–{content_count}) ...")
     rewritten = 0
-    needs_overlay: set[int] = set(range(total))
+    # Only content pages may receive numbers.
+    needs_overlay: set[int] = set(range(front_matter, total))
 
     for i in sorted(source_pages):
-        page_num = i + 1
+        if i < front_matter:
+            continue
+        page_num = i - front_matter + 1
         if renumber_source_header(writer.pages[i], page_num):
             rewritten += 1
             needs_overlay.discard(i)
 
     print(f"  rewrote headers on {rewritten} source pages")
 
-    # Cover / TOC / separators / booklet title pages: Helvetica overlay only.
+    # Title pages inside booklets (no header rewrite): Helvetica overlay.
     for i in sorted(needs_overlay):
-        page_num = i + 1
+        page_num = i - front_matter + 1
         page = writer.pages[i]
         width = float(page.mediabox.width)
         height = float(page.mediabox.height)
@@ -780,14 +694,14 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
     entries: list[dict] = []
     for _ in range(5):
         entries, _total = plan_pages(catalog, root, toc_pages)
-        toc_reader, toc_links = make_toc(entries)
+        toc_reader, toc_links = make_toc(entries, toc_pages)
         actual_toc_pages = len(toc_reader.pages)
         if actual_toc_pages == toc_pages:
             break
         toc_pages = actual_toc_pages
     else:
         entries, _total = plan_pages(catalog, root, toc_pages)
-        toc_reader, toc_links = make_toc(entries)
+        toc_reader, toc_links = make_toc(entries, toc_pages)
         toc_pages = len(toc_reader.pages)
 
     n_books = sum(len(c["books"]) for c in entries)
@@ -797,31 +711,13 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
     cover_page = 0
     toc_start = len(writer.pages)
     append_reader(writer, toc_reader)
-    assert len(writer.pages) == 1 + toc_pages
+    front_matter = 1 + toc_pages
+    assert len(writer.pages) == front_matter
 
     missing: list[str] = []
 
     for cat, cat_plan in zip(catalog["categories"], entries, strict=True):
         books = cat["books"]
-        pdf_count = sum(len(b.get("pdfs") or []) for b in books)
-        cat_page = len(writer.pages)
-        if cat_page != cat_plan["page_index"]:
-            print(
-                f"  WARNING: category {cat['category']} at {cat_page}, "
-                f"planned {cat_plan['page_index']}",
-                file=sys.stderr,
-            )
-        cover_cfg = catalog.get("cover") or {}
-        append_reader(
-            writer,
-            make_category_page(
-                cat["category"],
-                len(books),
-                pdf_count,
-                background=_parse_hex_color(cover_cfg.get("background")),
-                foreground=_parse_hex_color(cover_cfg.get("foreground")),
-            ),
-        )
         book_outlines: list[tuple[str, int]] = []
 
         for book, book_plan in zip(books, cat_plan["books"], strict=True):
@@ -834,15 +730,6 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
                     file=sys.stderr,
                 )
             rank_display = format_rank_range([p.get("rank") for p in pdfs])
-            append_reader(
-                writer,
-                make_book_page(
-                    book["title"],
-                    rank_display,
-                    len(pdfs),
-                    cat["category"],
-                ),
-            )
 
             for pdf in pdfs:
                 rel = pdf["file"]
@@ -866,11 +753,11 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
             label = (
                 f"{book['title']} ({rank_display})" if rank_display else book["title"]
             )
-            book_outlines.append((label, book_page))
+            book_outlines.append((label, book_plan["page_index"]))
 
-        outlines.append((cat["category"], cat_page, book_outlines))
+        outlines.append((cat["category"], cat_plan["page_index"], book_outlines))
 
-    stamp_continuous_page_numbers(writer, source_pages)
+    stamp_continuous_page_numbers(writer, source_pages, front_matter=front_matter)
     add_toc_links(writer, toc_start, toc_links)
 
     writer.add_outline_item("Cover", cover_page)
