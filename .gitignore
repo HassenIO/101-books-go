@@ -1,2 +1,8 @@
 docs/*
 !docs/.keep
+output/*
+!output/.keep
+.venv/
+__pycache__/
+*.pyc
+.DS_Store

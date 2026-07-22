@@ -1,4 +1,12 @@
-.PHONY: download
+.PHONY: download merge
+
+PYTHON ?= .venv/bin/python
+ifeq ($(wildcard $(PYTHON)),)
+PYTHON := python3
+endif
 
 download:
-	python3 src/download_books.py
+	$(PYTHON) src/download_books.py
+
+merge:
+	$(PYTHON) src/merge_books.py
