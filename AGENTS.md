@@ -9,10 +9,10 @@ Guidance for AI coding agents working on this repository.
 | Path | Role |
 |------|------|
 | `src/download_books.py` | Scrape index HTML, download PDFs → `docs/`, write `books.yaml` |
-| `src/merge_books.py` | Read `books.yaml`, merge PDFs → `output/101-go-books.pdf` |
-| `books.yaml` | Catalog (categories, ranks, parts, local paths, URLs) |
+| `src/merge_books.py` | Read `books.yaml`, build one PDF per `outputs` entry → `output/` |
+| `books.yaml` | Catalog + `outputs` volume definitions |
 | `docs/` | Downloaded PDFs (gitignored; keep `docs/.keep`) |
-| `output/` | Merged PDF (gitignored; keep `output/.keep`) |
+| `output/` | Merged PDFs (gitignored; keep `output/.keep`) |
 | `Makefile` | `make download`, `make merge` |
 | `pyproject.toml` / `uv.lock` | Python 3.12+, deps: pypdf, pyyaml, reportlab |
 
@@ -60,16 +60,22 @@ categories:
           - part: "1"    # only when multi-part
             file: docs/….pdf
             url: https://…
+
+outputs:
+  - title: string           # → output/<slug>.pdf
+    books: [title, …]       # optional; omit/empty = all books
 ```
 
-Merge assumes `file` paths are relative to the repo root and exist after download.
+- `outputs[].books` titles must match `categories[*].books[*].title` exactly.
+- Download **preserves** existing `outputs` when rewriting `books.yaml`.
+- Merge assumes `file` paths are relative to the repo root and exist after download.
 
 ## Conventions
 
 - Python 3.12+, no unnecessary comments.
 - Keep scripts runnable as `python src/….py` with `ROOT` = repo root.
 - Stdlib + declared deps only (pypdf, pyyaml, reportlab).
-- Match existing naming: `make download` / `make merge`, output `output/101-go-books.pdf`.
+- Match existing naming: `make download` / `make merge`, outputs under `output/<slug>.pdf`.
 - Do not commit generated binaries (PDFs under `docs/` / `output/`).
 - Do not invent new top-level commands without updating the Makefile and README.
 
@@ -113,4 +119,5 @@ uv pip install pymupdf
 | Cover / TOC / separators look | `make_*` helpers in `merge_books.py` |
 | Page numbering / headers | `renumber_source_header`, `stamp_continuous_page_numbers` |
 | TOC links | `make_toc` link list + `add_toc_links` |
+| Multiple output volumes | `outputs` in `books.yaml`; `resolve_output_catalog` / `merge_all` |
 | New make target | `Makefile` + `README.md` |

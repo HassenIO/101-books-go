@@ -138,7 +138,31 @@ def write_yaml(structure: dict, path: Path) -> None:
                 else:
                     lines.append(f"          - file: {p['file']}")
                     lines.append(f"            url: {p['url']}")
+    outputs = structure.get("outputs") or []
+    if outputs:
+        lines.append("outputs:")
+        for out in outputs:
+            lines.append(f"  - title: {_yaml_escape(out['title'])}")
+            books = out.get("books")
+            if books:
+                lines.append("    books:")
+                for title in books:
+                    lines.append(f"      - {_yaml_escape(title)}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def load_preserved_outputs(path: Path) -> list[dict] | None:
+    """Keep hand-edited ``outputs`` when regenerating the catalog."""
+    if not path.exists():
+        return None
+    try:
+        import yaml
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        outputs = data.get("outputs")
+        return outputs if isinstance(outputs, list) else None
+    except Exception:
+        return None
 
 
 def to_structure(categories: list[dict], ok: int, fail: int, pdf_count: int) -> dict:
@@ -199,6 +223,12 @@ def main() -> int:
                 fail += 1
 
     structure = to_structure(categories, ok, fail, len(jobs))
+    preserved = load_preserved_outputs(YAML_PATH)
+    if preserved:
+        structure["outputs"] = preserved
+        print(f"Preserved {len(preserved)} output(s) from existing books.yaml")
+    else:
+        structure["outputs"] = [{"title": "All 101 books"}]
     write_yaml(structure, YAML_PATH)
     print(f"Wrote {YAML_PATH}")
     print(f"Done: {ok} ok, {fail} failed")

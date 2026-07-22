@@ -452,3 +452,9 @@ categories:
         pdfs:
           - file: docs/guanzi-pu-endgame.pdf
             url: https://101books.github.io/pdfs/guanzi-pu-endgame.pdf
+outputs:
+  - title: "All 101 books"
+  - title: "Road to Shodan: Tesujis"
+    books:
+      - "Specialized Training in Tesuji"
+      - "Lee Chang-ho's Selected Tesuji"
