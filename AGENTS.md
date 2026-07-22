@@ -58,8 +58,10 @@ categories:
         pdfs:
           - part: "1"      # only when multi-part
             rank: 11k|1d   # from PDF cover Difficulty; per part
+            problems: 300  # from PDF cover "Problems:"; per part
             file: docs/….pdf
             url: https://…
+        # books also get problems: sum of parts
 
 outputs:
   - title: string           # → output/<slug>.pdf

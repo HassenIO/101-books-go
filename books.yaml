@@ -6,512 +6,668 @@ stats:
   pdfs: 107
   downloaded_ok: 107
   downloaded_failed: 0
+  problems: 23536
 categories:
   - category: Tesuji
     books:
       - title: Specialized Training in Tesuji
+        problems: 1760
         pdfs:
           - part: 1
             rank: 11k
+            problems: 300
             file: docs/specialized-training-in-tesuji-1.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tesuji-1.pdf
           - part: 2
             rank: 12k
+            problems: 300
             file: docs/specialized-training-in-tesuji-2.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tesuji-2.pdf
           - part: 3
             rank: 10k
+            problems: 300
             file: docs/specialized-training-in-tesuji-3.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tesuji-3.pdf
           - part: 4
             rank: 10k
+            problems: 300
             file: docs/specialized-training-in-tesuji-4.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tesuji-4.pdf
           - part: 5
             rank: 7k
+            problems: 300
             file: docs/specialized-training-in-tesuji-5.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tesuji-5.pdf
           - part: 6
             rank: 8k
+            problems: 260
             file: docs/specialized-training-in-tesuji-6.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tesuji-6.pdf
       - title: "Lee Chang-ho's Selected Tesuji"
+        problems: 728
         pdfs:
           - part: 1
             rank: 8k
+            problems: 240
             file: docs/lee-chang-hos-selected-tesuji-part-1.pdf
             url: https://101books.github.io/pdfs/lee-chang-hos-selected-tesuji-part-1.pdf
           - part: 2
             rank: 6k
+            problems: 240
             file: docs/lee-chang-hos-selected-tesuji-part-2.pdf
             url: https://101books.github.io/pdfs/lee-chang-hos-selected-tesuji-part-2.pdf
           - part: 3
             rank: 2k
+            problems: 248
             file: docs/lee-chang-hos-selected-tesuji-part-3.pdf
             url: https://101books.github.io/pdfs/lee-chang-hos-selected-tesuji-part-3.pdf
       - title: Seedling Project
+        problems: 300
         pdfs:
           - rank: 8k
+            problems: 300
             file: docs/seedling-project.pdf
             url: https://101books.github.io/pdfs/seedling-project.pdf
       - title: "Nie Weiping's Tesuji Encyclopedia"
+        problems: 144
         pdfs:
           - rank: 6k
+            problems: 144
             file: docs/nie-weipings-tesuji-encyclopedia.pdf
             url: https://101books.github.io/pdfs/nie-weipings-tesuji-encyclopedia.pdf
       - title: The Unexpected Tesuji
+        problems: 192
         pdfs:
           - rank: 4k
+            problems: 192
             file: docs/the-unexpected-tesuji.pdf
             url: https://101books.github.io/pdfs/the-unexpected-tesuji.pdf
       - title: Ishida Yoshio Tesuji
+        problems: 224
         pdfs:
           - rank: 4k
+            problems: 224
             file: docs/ishida-yoshio-tesuji.pdf
             url: https://101books.github.io/pdfs/ishida-yoshio-tesuji.pdf
       - title: Fighting and Escaping
+        problems: 580
         pdfs:
           - part: 1
             rank: 4k
+            problems: 192
             file: docs/fighting-and-escaping-part-1.pdf
             url: https://101books.github.io/pdfs/fighting-and-escaping-part-1.pdf
           - part: 2
             rank: 4k
+            problems: 192
             file: docs/fighting-and-escaping-part-2.pdf
             url: https://101books.github.io/pdfs/fighting-and-escaping-part-2.pdf
           - part: 3
             rank: 3k
+            problems: 196
             file: docs/fighting-and-escaping-part-3.pdf
             url: https://101books.github.io/pdfs/fighting-and-escaping-part-3.pdf
       - title: The Great Tesuji Encyclopedia
+        problems: 2096
         pdfs:
           - part: 1
             rank: 2k
+            problems: 300
             file: docs/the-great-tesuji-encyclopedia-1.pdf
             url: https://101books.github.io/pdfs/the-great-tesuji-encyclopedia-1.pdf
           - part: 2
             rank: 1k
+            problems: 300
             file: docs/the-great-tesuji-encyclopedia-2.pdf
             url: https://101books.github.io/pdfs/the-great-tesuji-encyclopedia-2.pdf
           - part: 3
             rank: 2k
+            problems: 300
             file: docs/the-great-tesuji-encyclopedia-3.pdf
             url: https://101books.github.io/pdfs/the-great-tesuji-encyclopedia-3.pdf
           - part: 4
             rank: 2k
+            problems: 300
             file: docs/the-great-tesuji-encyclopedia-4.pdf
             url: https://101books.github.io/pdfs/the-great-tesuji-encyclopedia-4.pdf
           - part: 5
             rank: 1k
+            problems: 300
             file: docs/the-great-tesuji-encyclopedia-5.pdf
             url: https://101books.github.io/pdfs/the-great-tesuji-encyclopedia-5.pdf
           - part: 6
             rank: 1k
+            problems: 300
             file: docs/the-great-tesuji-encyclopedia-6.pdf
             url: https://101books.github.io/pdfs/the-great-tesuji-encyclopedia-6.pdf
           - part: 7
             rank: 1d
+            problems: 296
             file: docs/the-great-tesuji-encyclopedia-7.pdf
             url: https://101books.github.io/pdfs/the-great-tesuji-encyclopedia-7.pdf
       - title: Segoe Tesuji Dictionary
+        problems: 868
         pdfs:
           - part: 1
             rank: 1k
+            problems: 220
             file: docs/segoe-tesuji-dictionary-part-1.pdf
             url: https://101books.github.io/pdfs/segoe-tesuji-dictionary-part-1.pdf
           - part: 2
             rank: 1k
+            problems: 216
             file: docs/segoe-tesuji-dictionary-part-2.pdf
             url: https://101books.github.io/pdfs/segoe-tesuji-dictionary-part-2.pdf
           - part: 3
             rank: 1k
+            problems: 216
             file: docs/segoe-tesuji-dictionary-part-3.pdf
             url: https://101books.github.io/pdfs/segoe-tesuji-dictionary-part-3.pdf
           - part: 4
             rank: 1k
+            problems: 216
             file: docs/segoe-tesuji-dictionary-part-4.pdf
             url: https://101books.github.io/pdfs/segoe-tesuji-dictionary-part-4.pdf
   - category: Tsumego
     books:
       - title: Specialized Training in Capturing Races
+        problems: 288
         pdfs:
           - rank: 10k
+            problems: 288
             file: docs/specialized-training-in-capturing-races.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-capturing-races.pdf
       - title: Specialized Training in Tsumego
+        problems: 1560
         pdfs:
           - part: 1
             rank: 10k
+            problems: 264
             file: docs/specialized-training-in-tsumego-1.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tsumego-1.pdf
           - part: 2
             rank: 9k
+            problems: 264
             file: docs/specialized-training-in-tsumego-2.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tsumego-2.pdf
           - part: 3
             rank: 9k
+            problems: 264
             file: docs/specialized-training-in-tsumego-3.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tsumego-3.pdf
           - part: 4
             rank: 8k
+            problems: 264
             file: docs/specialized-training-in-tsumego-4.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tsumego-4.pdf
           - part: 5
             rank: 7k
+            problems: 264
             file: docs/specialized-training-in-tsumego-5.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tsumego-5.pdf
           - part: 6
             rank: 6k
+            problems: 240
             file: docs/specialized-training-in-tsumego-6.pdf
             url: https://101books.github.io/pdfs/specialized-training-in-tsumego-6.pdf
       - title: Go Puzzles at a Glance
+        problems: 180
         pdfs:
           - rank: 8k
+            problems: 180
             file: docs/go-puzzles-at-a-glance.pdf
             url: https://101books.github.io/pdfs/go-puzzles-at-a-glance.pdf
       - title: "Lee Chang-ho's Selected Tsumego"
+        problems: 732
         pdfs:
           - part: 1
             rank: 7k
+            problems: 240
             file: docs/lee-chang-hos-selected-tsumego-part-1.pdf
             url: https://101books.github.io/pdfs/lee-chang-hos-selected-tsumego-part-1.pdf
           - part: 2
             rank: 4k
+            problems: 240
             file: docs/lee-chang-hos-selected-tsumego-part-2.pdf
             url: https://101books.github.io/pdfs/lee-chang-hos-selected-tsumego-part-2.pdf
           - part: 3
             rank: 1d
+            problems: 252
             file: docs/lee-chang-hos-selected-tsumego-part-3.pdf
             url: https://101books.github.io/pdfs/lee-chang-hos-selected-tsumego-part-3.pdf
       - title: Compact Go Puzzles to Learn the Basics
+        problems: 180
         pdfs:
           - rank: 7k
+            problems: 180
             file: docs/compact-go-puzzles-to-learn-the-basics.pdf
             url: https://101books.github.io/pdfs/compact-go-puzzles-to-learn-the-basics.pdf
       - title: "Weiqi Life & Death 1000 Problems"
+        problems: 1032
         pdfs:
           - part: 1
             rank: 6k
+            problems: 252
             file: docs/weiqi-life-and-death-1000-problems-part-1.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-1000-problems-part-1.pdf
           - part: 2
             rank: 4k
+            problems: 252
             file: docs/weiqi-life-and-death-1000-problems-part-2.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-1000-problems-part-2.pdf
           - part: 3
             rank: 2k
+            problems: 264
             file: docs/weiqi-life-and-death-1000-problems-part-3.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-1000-problems-part-3.pdf
           - part: 4
             rank: 2k
+            problems: 264
             file: docs/weiqi-life-and-death-1000-problems-part-4.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-1000-problems-part-4.pdf
       - title: Hitomi Tsumego
+        problems: 180
         pdfs:
           - rank: 6k
+            problems: 180
             file: docs/hitomi-tsumego.pdf
             url: https://101books.github.io/pdfs/hitomi-tsumego.pdf
       - title: 200 Selected Problems for Repetitive Practice
+        problems: 200
         pdfs:
           - rank: 6k
+            problems: 200
             file: docs/200-selected-problems-for-repetitive-practice.pdf
             url: https://101books.github.io/pdfs/200-selected-problems-for-repetitive-practice.pdf
       - title: 200 Basic Go Problems
+        problems: 200
         pdfs:
           - rank: 6k
+            problems: 200
             file: docs/200-basic-go-problems.pdf
             url: https://101books.github.io/pdfs/200-basic-go-problems.pdf
       - title: Ohashi-Style Power-Up Tsumego
+        problems: 456
         pdfs:
           - part: 1
             rank: 6k
+            problems: 228
             file: docs/ohashi-style-power-up-tsumego-part-1.pdf
             url: https://101books.github.io/pdfs/ohashi-style-power-up-tsumego-part-1.pdf
           - part: 2
             rank: 4k
+            problems: 228
             file: docs/ohashi-style-power-up-tsumego-part-2.pdf
             url: https://101books.github.io/pdfs/ohashi-style-power-up-tsumego-part-2.pdf
       - title: Bedtime Tsumego
+        problems: 288
         pdfs:
           - part: 1
             rank: 5k
+            problems: 96
             file: docs/bedtime-tsumego-part-1.pdf
             url: https://101books.github.io/pdfs/bedtime-tsumego-part-1.pdf
           - part: 2
             rank: 4k
+            problems: 96
             file: docs/bedtime-tsumego-part-2.pdf
             url: https://101books.github.io/pdfs/bedtime-tsumego-part-2.pdf
           - part: 3
             rank: 2k
+            problems: 96
             file: docs/bedtime-tsumego-part-3.pdf
             url: https://101books.github.io/pdfs/bedtime-tsumego-part-3.pdf
       - title: Ishida Yoshio Tsumego Challenge
+        problems: 96
         pdfs:
           - rank: 4k
+            problems: 96
             file: docs/ishida-yoshio-tsumego-challenge.pdf
             url: https://101books.github.io/pdfs/ishida-yoshio-tsumego-challenge.pdf
       - title: Fujisawa Shuko Classroom
+        problems: 200
         pdfs:
           - rank: 4k
+            problems: 200
             file: docs/fujisawa-shuko-classroom.pdf
             url: https://101books.github.io/pdfs/fujisawa-shuko-classroom.pdf
       - title: "Common Life & Death Problems"
+        problems: 372
         pdfs:
           - rank: 4k
+            problems: 372
             file: docs/common-life-and-death-problems.pdf
             url: https://101books.github.io/pdfs/common-life-and-death-problems.pdf
       - title: "Weiqi Life & Death Drills Beginner"
+        problems: 808
         pdfs:
           - part: 1
             rank: 4k
+            problems: 192
             file: docs/weiqi-life-and-death-drills-beginner-part-1.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-drills-beginner-part-1.pdf
           - part: 2
             rank: 3k
+            problems: 192
             file: docs/weiqi-life-and-death-drills-beginner-part-2.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-drills-beginner-part-2.pdf
           - part: 3
             rank: 3k
+            problems: 192
             file: docs/weiqi-life-and-death-drills-beginner-part-3.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-drills-beginner-part-3.pdf
           - part: 4
             rank: 2k
+            problems: 232
             file: docs/weiqi-life-and-death-drills-beginner-part-4.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-drills-beginner-part-4.pdf
       - title: Weiqi Small Leisure Collection
+        problems: 240
         pdfs:
           - rank: 3k
+            problems: 240
             file: docs/weiqi-small-leisure-collection.pdf
             url: https://101books.github.io/pdfs/weiqi-small-leisure-collection.pdf
       - title: Weiqi Rapid Drill 800
+        problems: 792
         pdfs:
           - part: 1
             rank: 3k
+            problems: 192
             file: docs/weiqi-rapid-drill-800-part-1.pdf
             url: https://101books.github.io/pdfs/weiqi-rapid-drill-800-part-1.pdf
           - part: 2
             rank: 7k
+            problems: 192
             file: docs/weiqi-rapid-drill-800-part-2.pdf
             url: https://101books.github.io/pdfs/weiqi-rapid-drill-800-part-2.pdf
           - part: 3
             rank: 7k
+            problems: 192
             file: docs/weiqi-rapid-drill-800-part-3.pdf
             url: https://101books.github.io/pdfs/weiqi-rapid-drill-800-part-3.pdf
           - part: 4
             rank: 6k
+            problems: 216
             file: docs/weiqi-rapid-drill-800-part-4.pdf
             url: https://101books.github.io/pdfs/weiqi-rapid-drill-800-part-4.pdf
       - title: Maeda Tsumego
+        problems: 584
         pdfs:
           - part: 1
             rank: 3k
+            problems: 192
             file: docs/maeda-tsumego-part-1.pdf
             url: https://101books.github.io/pdfs/maeda-tsumego-part-1.pdf
           - part: 2
             rank: 1k
+            problems: 192
             file: docs/maeda-tsumego-part-2.pdf
             url: https://101books.github.io/pdfs/maeda-tsumego-part-2.pdf
           - part: 3
             rank: 1k
+            problems: 200
             file: docs/maeda-tsumego-part-3.pdf
             url: https://101books.github.io/pdfs/maeda-tsumego-part-3.pdf
       - title: "Nie Weiping's Tsumego Encyclopedia"
+        problems: 156
         pdfs:
           - rank: 2k
+            problems: 156
             file: docs/nie-weipings-tsumego-encyclopedia.pdf
             url: https://101books.github.io/pdfs/nie-weipings-tsumego-encyclopedia.pdf
       - title: Segoe Tsumego Dictionary
+        problems: 948
         pdfs:
           - part: 1
             rank: 1k
+            problems: 240
             file: docs/segoe-tsumego-dictionary-part-1.pdf
             url: https://101books.github.io/pdfs/segoe-tsumego-dictionary-part-1.pdf
           - part: 2
             rank: 1k
+            problems: 240
             file: docs/segoe-tsumego-dictionary-part-2.pdf
             url: https://101books.github.io/pdfs/segoe-tsumego-dictionary-part-2.pdf
           - part: 3
             rank: 2k
+            problems: 240
             file: docs/segoe-tsumego-dictionary-part-3.pdf
             url: https://101books.github.io/pdfs/segoe-tsumego-dictionary-part-3.pdf
           - part: 4
             rank: 2d
+            problems: 228
             file: docs/segoe-tsumego-dictionary-part-4.pdf
             url: https://101books.github.io/pdfs/segoe-tsumego-dictionary-part-4.pdf
       - title: Hashimoto Masterpiece Collection
+        problems: 160
         pdfs:
           - rank: 1k
+            problems: 160
             file: docs/hashimoto-masterpiece-collection.pdf
             url: https://101books.github.io/pdfs/hashimoto-masterpiece-collection.pdf
       - title: Increase Your Fighting Strength at Go
+        problems: 304
         pdfs:
           - part: 1
             rank: 1d
+            problems: 152
             file: docs/increase-your-fighting-strength-at-go-part-1.pdf
             url: https://101books.github.io/pdfs/increase-your-fighting-strength-at-go-part-1.pdf
           - part: 2
             rank: 1d
+            problems: 152
             file: docs/increase-your-fighting-strength-at-go-part-2.pdf
             url: https://101books.github.io/pdfs/increase-your-fighting-strength-at-go-part-2.pdf
       - title: Go Seigen Tsumego Collection
+        problems: 1032
         pdfs:
           - part: 1
             rank: 1d
+            problems: 236
             file: docs/go-seigen-tsumego-collection-part-1.pdf
             url: https://101books.github.io/pdfs/go-seigen-tsumego-collection-part-1.pdf
           - part: 2
             rank: 2d
+            problems: 116
             file: docs/go-seigen-tsumego-collection-part-2.pdf
             url: https://101books.github.io/pdfs/go-seigen-tsumego-collection-part-2.pdf
           - part: 3
             rank: 2d
+            problems: 192
             file: docs/go-seigen-tsumego-collection-part-3.pdf
             url: https://101books.github.io/pdfs/go-seigen-tsumego-collection-part-3.pdf
           - part: 4
             rank: 2d
+            problems: 196
             file: docs/go-seigen-tsumego-collection-part-4.pdf
             url: https://101books.github.io/pdfs/go-seigen-tsumego-collection-part-4.pdf
           - part: 5
             rank: 2d
+            problems: 188
             file: docs/go-seigen-tsumego-collection-part-5.pdf
             url: https://101books.github.io/pdfs/go-seigen-tsumego-collection-part-5.pdf
           - part: 6
             rank: 1d
+            problems: 104
             file: docs/go-seigen-tsumego-collection-part-6.pdf
             url: https://101books.github.io/pdfs/go-seigen-tsumego-collection-part-6.pdf
       - title: Xuanxuan Qijing
+        problems: 228
         pdfs:
           - rank: 1d
+            problems: 228
             file: docs/xuanxuan-qijing.pdf
             url: https://101books.github.io/pdfs/xuanxuan-qijing.pdf
       - title: "Weiqi Life & Death Drills Intermediate"
+        problems: 728
         pdfs:
           - part: 1
             rank: 1d
+            problems: 180
             file: docs/weiqi-life-and-death-drills-intermediate-part-1.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-drills-intermediate-part-1.pdf
           - part: 2
             rank: 1d
+            problems: 180
             file: docs/weiqi-life-and-death-drills-intermediate-part-2.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-drills-intermediate-part-2.pdf
           - part: 3
             rank: 1d
+            problems: 180
             file: docs/weiqi-life-and-death-drills-intermediate-part-3.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-drills-intermediate-part-3.pdf
           - part: 4
             rank: 1d
+            problems: 188
             file: docs/weiqi-life-and-death-drills-intermediate-part-4.pdf
             url: https://101books.github.io/pdfs/weiqi-life-and-death-drills-intermediate-part-4.pdf
       - title: Beautiful Dan-Level Tsumego 100
+        problems: 200
         pdfs:
           - rank: 1d
+            problems: 200
             file: docs/beautiful-dan-level-tsumego-100.pdf
             url: https://101books.github.io/pdfs/beautiful-dan-level-tsumego-100.pdf
       - title: Hashimoto Famous Creations
+        problems: 300
         pdfs:
           - rank: 2d
+            problems: 300
             file: docs/hashimoto-famous-creations.pdf
             url: https://101books.github.io/pdfs/hashimoto-famous-creations.pdf
       - title: Shikatsu Myoki
+        problems: 124
         pdfs:
           - rank: 2d
+            problems: 124
             file: docs/shikatsu-myoki.pdf
             url: https://101books.github.io/pdfs/shikatsu-myoki.pdf
       - title: Kada Katsuji Tsumego
+        problems: 600
         pdfs:
           - part: 1
             rank: 3d
+            problems: 192
             file: docs/kada-katsuji-tsumego-part-1.pdf
             url: https://101books.github.io/pdfs/kada-katsuji-tsumego-part-1.pdf
           - part: 2
             rank: 3d
+            problems: 192
             file: docs/kada-katsuji-tsumego-part-2.pdf
             url: https://101books.github.io/pdfs/kada-katsuji-tsumego-part-2.pdf
           - part: 3
             rank: 3d
+            problems: 216
             file: docs/kada-katsuji-tsumego-part-3.pdf
             url: https://101books.github.io/pdfs/kada-katsuji-tsumego-part-3.pdf
       - title: Showa Tsumego
+        problems: 270
         pdfs:
           - rank: 3d
+            problems: 270
             file: docs/showa-tsumego.pdf
             url: https://101books.github.io/pdfs/showa-tsumego.pdf
       - title: Heavenly Dragons
+        problems: 1000
         pdfs:
           - part: 1
             rank: 4d
+            problems: 252
             file: docs/heavenly-dragons-part-1.pdf
             url: https://101books.github.io/pdfs/heavenly-dragons-part-1.pdf
           - part: 2
             rank: 3d
+            problems: 264
             file: docs/heavenly-dragons-part-2.pdf
             url: https://101books.github.io/pdfs/heavenly-dragons-part-2.pdf
           - part: 3
             rank: 4d
+            problems: 252
             file: docs/heavenly-dragons-part-3.pdf
             url: https://101books.github.io/pdfs/heavenly-dragons-part-3.pdf
           - part: 4
             rank: 4d
+            problems: 232
             file: docs/heavenly-dragons-part-4.pdf
             url: https://101books.github.io/pdfs/heavenly-dragons-part-4.pdf
       - title: Igo Hatsuyoron
+        problems: 144
         pdfs:
           - rank: 5d
+            problems: 144
             file: docs/igo-hatsuyoron.pdf
             url: https://101books.github.io/pdfs/igo-hatsuyoron.pdf
   - category: Endgame
     books:
       - title: Go Endgame Techniques
+        problems: 240
         pdfs:
           - rank: 3k
+            problems: 240
             file: docs/go-endgame-techniques.pdf
             url: https://101books.github.io/pdfs/go-endgame-techniques.pdf
       - title: "Nie Weiping's Endgame Encyclopedia"
+        problems: 216
         pdfs:
           - rank: 2k
+            problems: 216
             file: docs/nie-weipings-endgame-encyclopedia.pdf
             url: https://101books.github.io/pdfs/nie-weipings-endgame-encyclopedia.pdf
       - title: "Lee Chang-ho's Endgame Techniques"
+        problems: 200
         pdfs:
           - rank: 2k
+            problems: 200
             file: docs/lee-chang-hos-endgame-techniques.pdf
             url: https://101books.github.io/pdfs/lee-chang-hos-endgame-techniques.pdf
       - title: New Korean Endgame Dictionary
+        problems: 300
         pdfs:
           - rank: 2k
+            problems: 300
             file: docs/new-korean-endgame-dictionary.pdf
             url: https://101books.github.io/pdfs/new-korean-endgame-dictionary.pdf
       - title: Sakata no Go Endgame
+        problems: 96
         pdfs:
           - rank: 1d
+            problems: 96
             file: docs/sakata-no-go-endgame.pdf
             url: https://101books.github.io/pdfs/sakata-no-go-endgame.pdf
       - title: Gokyo Seimyo Endgame
+        problems: 130
         pdfs:
           - rank: 1d
+            problems: 130
             file: docs/gokyo-seimyo-endgame.pdf
             url: https://101books.github.io/pdfs/gokyo-seimyo-endgame.pdf
       - title: Go Seigen Endgame
+        problems: 552
         pdfs:
           - part: 1
             rank: 1d
+            problems: 168
             file: docs/go-seigen-endgame-part-1.pdf
             url: https://101books.github.io/pdfs/go-seigen-endgame-part-1.pdf
           - part: 2
             rank: 1d
+            problems: 168
             file: docs/go-seigen-endgame-part-2.pdf
             url: https://101books.github.io/pdfs/go-seigen-endgame-part-2.pdf
           - part: 3
             rank: 1d
+            problems: 216
             file: docs/go-seigen-endgame-part-3.pdf
             url: https://101books.github.io/pdfs/go-seigen-endgame-part-3.pdf
       - title: Guanzi Pu Endgame
+        problems: 328
         pdfs:
           - rank: 2d
+            problems: 328
             file: docs/guanzi-pu-endgame.pdf
             url: https://101books.github.io/pdfs/guanzi-pu-endgame.pdf
 outputs:
-  # - title: All 101 books
   - title: "Tesuji's Path to Mastery"
     books:
       - Specialized Training in Tesuji
