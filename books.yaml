@@ -669,6 +669,9 @@ categories:
             url: https://101books.github.io/pdfs/guanzi-pu-endgame.pdf
 outputs:
   - title: "Tesuji's Path to Mastery"
+    cover:
+      background: "#6d0b1b"
+      foreground: "#ffffff"
     books:
       - Specialized Training in Tesuji
       - "Lee Chang-ho's Selected Tesuji"

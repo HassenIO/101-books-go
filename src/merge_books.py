@@ -56,7 +56,27 @@ def slugify(title: str) -> str:
 def catalog_stats(categories: list[dict]) -> dict:
     books = sum(len(c.get("books") or []) for c in categories)
     pdfs = sum(len(b.get("pdfs") or []) for c in categories for b in c.get("books") or [])
-    return {"categories": len(categories), "books": books, "pdfs": pdfs}
+    problems = 0
+    ranks: list[str | None] = []
+    for cat in categories:
+        for book in cat.get("books") or []:
+            if book.get("problems") is not None:
+                problems += int(book["problems"])
+            else:
+                problems += sum(
+                    int(p["problems"])
+                    for p in (book.get("pdfs") or [])
+                    if p.get("problems") is not None
+                )
+            for p in book.get("pdfs") or []:
+                ranks.append(p.get("rank"))
+    return {
+        "categories": len(categories),
+        "books": books,
+        "pdfs": pdfs,
+        "problems": problems,
+        "ranks": ranks,
+    }
 
 
 def index_books_by_title(categories: list[dict]) -> dict[str, tuple[str, dict]]:
@@ -115,6 +135,7 @@ def resolve_output_catalog(full_catalog: dict, output_spec: dict) -> dict:
         "stats": stats,
         "categories": filtered,
         "title": output_spec["title"],
+        "cover": output_spec.get("cover") or {},
     }
 
 
@@ -129,25 +150,42 @@ def resolve_outputs(full_catalog: dict) -> list[dict]:
     return outputs
 
 
+def _parse_hex_color(value: str | None, default: HexColor | None = None) -> HexColor | None:
+    if not value or not isinstance(value, str):
+        return default
+    s = value.strip()
+    if not s.startswith("#"):
+        s = "#" + s
+    try:
+        return HexColor(s)
+    except Exception:
+        return default
+
+
 def make_cover(catalog: dict) -> PdfReader:
-    c, buf = _new_page()
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
     stats = catalog.get("stats") or {}
     title = catalog.get("title") or "101 Go Books"
-    c.setFillColor(ACCENT)
-    c.rect(0, PAGE_H - 8 * mm, PAGE_W, 8 * mm, fill=1, stroke=0)
-    c.rect(0, 0, PAGE_W, 8 * mm, fill=1, stroke=0)
+    cover_cfg = catalog.get("cover") or {}
+    bg = _parse_hex_color(cover_cfg.get("background"), BG)
+    fg = _parse_hex_color(cover_cfg.get("foreground"), INK)
 
-    c.setFillColor(INK)
-    # Wrap long output titles on the cover.
+    c.setFillColor(bg)
+    c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
+
+    c.setFillColor(fg)
+    # Serif title (Times-Bold is built into PDF viewers).
+    font_name = "Times-Bold"
     font_size = 32 if len(title) > 28 else 36
-    c.setFont("Helvetica-Bold", font_size)
+    c.setFont(font_name, font_size)
     max_w = PAGE_W - 40 * mm
     words = title.split()
     lines_t: list[str] = []
     cur = ""
     for w in words:
         trial = f"{cur} {w}".strip()
-        if c.stringWidth(trial, "Helvetica-Bold", font_size) <= max_w:
+        if c.stringWidth(trial, font_name, font_size) <= max_w:
             cur = trial
         else:
             if cur:
@@ -157,39 +195,34 @@ def make_cover(catalog: dict) -> PdfReader:
         lines_t.append(cur)
     if not lines_t:
         lines_t = [title]
-    y_title = PAGE_H * 0.62 + (len(lines_t) - 1) * (font_size * 0.55)
+    y_title = PAGE_H * 0.58 + (len(lines_t) - 1) * (font_size * 0.55)
     for line in lines_t:
         c.drawCentredString(PAGE_W / 2, y_title, line)
         y_title -= font_size * 1.15
 
-    c.setStrokeColor(RULE)
+    c.setStrokeColor(fg)
     c.setLineWidth(1.2)
-    rule_y = y_title - 6
+    rule_y = y_title - 8
     c.line(PAGE_W * 0.25, rule_y, PAGE_W * 0.75, rule_y)
 
-    c.setFillColor(MUTED)
-    c.setFont("Helvetica", 14)
-    c.drawCentredString(
-        PAGE_W / 2,
-        rule_y - 28,
-        "Go / Weiqi / Baduk problem booklets",
-    )
+    problems = stats.get("problems")
+    if problems is None:
+        problems = 0
+    rank_range = format_rank_range(stats.get("ranks") or [])
 
-    lines = [
-        f"{stats.get('categories', 0)} categories",
-        f"{stats.get('books', 0)} books",
-        f"{stats.get('pdfs', 0)} PDF volumes",
-    ]
-    c.setFillColor(INK)
-    c.setFont("Helvetica", 13)
-    y = rule_y - 70
-    for line in lines:
+    detail_lines: list[str] = []
+    if problems:
+        detail_lines.append(f"{problems:,} GO PROBLEMS".replace(",", " "))
+    if rank_range:
+        detail_lines.append(rank_range.upper())
+
+    c.setFillColor(fg)
+    c.setFont("Helvetica", 12)
+    y = rule_y - 36
+    for line in detail_lines:
         c.drawCentredString(PAGE_W / 2, y, line)
-        y -= 20
+        y -= 22
 
-    c.setFillColor(MUTED)
-    c.setFont("Helvetica", 10)
-    c.drawCentredString(PAGE_W / 2, 28 * mm, catalog.get("source", "https://101books.github.io/"))
     c.showPage()
     c.save()
     return _page_reader(buf)
@@ -458,12 +491,23 @@ def add_toc_links(writer: PdfWriter, toc_start: int, links: list[dict]) -> None:
         writer.add_annotation(page_number=toc_idx, annotation=annot)
 
 
-def make_category_page(name: str, book_count: int, pdf_count: int) -> PdfReader:
+def make_category_page(
+    name: str,
+    book_count: int,
+    pdf_count: int,
+    *,
+    background: HexColor | None = None,
+    foreground: HexColor | None = None,
+) -> PdfReader:
+    """Cream page with a mid-page banner; banner uses cover colors when set."""
     c, buf = _new_page()
-    c.setFillColor(ACCENT)
+    band = background if background is not None else ACCENT
+    text = foreground if foreground is not None else white
+
+    c.setFillColor(band)
     c.rect(0, PAGE_H / 2 - 28 * mm, PAGE_W, 56 * mm, fill=1, stroke=0)
 
-    c.setFillColor(white)
+    c.setFillColor(text)
     c.setFont("Helvetica-Bold", 42)
     c.drawCentredString(PAGE_W / 2, PAGE_H / 2 + 2 * mm, name)
 
@@ -474,9 +518,6 @@ def make_category_page(name: str, book_count: int, pdf_count: int) -> PdfReader:
         f"{book_count} books  ·  {pdf_count} volumes",
     )
 
-    c.setFillColor(MUTED)
-    c.setFont("Helvetica", 11)
-    c.drawCentredString(PAGE_W / 2, 30 * mm, "Category")
     c.showPage()
     c.save()
     return _page_reader(buf)
@@ -770,7 +811,17 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
                 f"planned {cat_plan['page_index']}",
                 file=sys.stderr,
             )
-        append_reader(writer, make_category_page(cat["category"], len(books), pdf_count))
+        cover_cfg = catalog.get("cover") or {}
+        append_reader(
+            writer,
+            make_category_page(
+                cat["category"],
+                len(books),
+                pdf_count,
+                background=_parse_hex_color(cover_cfg.get("background")),
+                foreground=_parse_hex_color(cover_cfg.get("foreground")),
+            ),
+        )
         book_outlines: list[tuple[str, int]] = []
 
         for book, book_plan in zip(books, cat_plan["books"], strict=True):
