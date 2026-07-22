@@ -1,0 +1,7 @@
+[project]
+name = "101gobooks"
+version = "0.1.0"
+description = "Download and process 101 Go Books available for free"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
