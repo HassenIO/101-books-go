@@ -511,8 +511,15 @@ categories:
             file: docs/guanzi-pu-endgame.pdf
             url: https://101books.github.io/pdfs/guanzi-pu-endgame.pdf
 outputs:
-  - title: All 101 books
-  - title: "Road to Shodan: Tesujis"
+  # - title: All 101 books
+  - title: "Tesuji's Path to Mastery"
     books:
       - Specialized Training in Tesuji
       - "Lee Chang-ho's Selected Tesuji"
+      - Seedling Project
+      - "Nie Weiping's Tesuji Encyclopedia"
+      - The Unexpected Tesuji
+      - Ishida Yoshio Tesuji
+      - Fighting and Escaping
+      - The Great Tesuji Encyclopedia
+      - Segoe Tesuji Dictionary
