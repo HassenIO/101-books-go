@@ -42,9 +42,6 @@ def _parse_list_items(html_fragment: str) -> list[dict]:
     items = re.findall(r"<li[^>]*>(.*?)</li>", html_fragment, flags=re.S | re.I)
     books: list[dict] = []
     for item in items:
-        rank_m = re.search(r"\((\d+[kd]|[1-9]d)\)", item, re.I)
-        rank = rank_m.group(1).lower() if rank_m else None
-
         links = re.findall(
             r'<a[^>]+href=["\']([^"\']+\.pdf)["\'][^>]*>(.*?)</a>',
             item,
@@ -55,6 +52,7 @@ def _parse_list_items(html_fragment: str) -> list[dict]:
 
         before = item.split("<a", 1)[0]
         title = re.sub(r"<[^>]+>", "", before)
+        # Drop site-level rank markers like "(11k)" — real ranks come from each PDF.
         title = re.sub(r"\([^)]*\)", "", title)
         title = title.replace(":", "").strip()
         title = re.sub(r"\s+", " ", title)
@@ -72,8 +70,49 @@ def _parse_list_items(html_fragment: str) -> list[dict]:
                 part = label_clean
             pdfs.append({"part": part, "file": filename, "url": url})
 
-        books.append({"title": title, "rank": rank, "pdfs": pdfs})
+        books.append({"title": title, "pdfs": pdfs})
     return books
+
+
+def extract_pdf_rank(path: Path) -> str | None:
+    """Read difficulty from a booklet cover page → compact ``11k`` / ``4d``."""
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        return None
+    if not path.exists() or path.stat().st_size == 0:
+        return None
+    try:
+        reader = PdfReader(str(path))
+        if not reader.pages:
+            return None
+        text = reader.pages[0].extract_text() or ""
+    except Exception:
+        return None
+    # PDF text often has "ky¯ u" (macron / combining bar).
+    text = text.replace("\u0304", "").replace("¯", "")
+    text = re.sub(r"\s+", " ", text)
+    m = re.search(r"Difficulty:\s*(\d+)\s*ky\s*u", text, flags=re.I)
+    if m:
+        return f"{int(m.group(1))}k"
+    m = re.search(r"Difficulty:\s*(\d+)\s*dan", text, flags=re.I)
+    if m:
+        return f"{int(m.group(1))}d"
+    return None
+
+
+def enrich_pdf_ranks(structure: dict) -> int:
+    """Attach per-PDF ranks from cover pages. Returns how many ranks found."""
+    found = 0
+    for cat in structure.get("categories") or []:
+        for book in cat.get("books") or []:
+            for pdf in book.get("pdfs") or []:
+                path = ROOT / pdf["file"]
+                rank = extract_pdf_rank(path)
+                pdf["rank"] = rank
+                if rank:
+                    found += 1
+    return found
 
 
 def collect_urls(categories: list[dict]) -> list[tuple[str, Path]]:
@@ -128,16 +167,22 @@ def write_yaml(structure: dict, path: Path) -> None:
         lines.append("    books:")
         for book in cat["books"]:
             lines.append(f"      - title: {_yaml_escape(book['title'])}")
-            lines.append(f"        rank: {book['rank']}")
             lines.append("        pdfs:")
             for p in book["pdfs"]:
                 if p.get("part") is not None:
                     lines.append(f"          - part: {_yaml_escape(str(p['part']))}")
+                    if p.get("rank") is not None:
+                        lines.append(f"            rank: {p['rank']}")
                     lines.append(f"            file: {p['file']}")
                     lines.append(f"            url: {p['url']}")
                 else:
-                    lines.append(f"          - file: {p['file']}")
-                    lines.append(f"            url: {p['url']}")
+                    if p.get("rank") is not None:
+                        lines.append(f"          - rank: {p['rank']}")
+                        lines.append(f"            file: {p['file']}")
+                        lines.append(f"            url: {p['url']}")
+                    else:
+                        lines.append(f"          - file: {p['file']}")
+                        lines.append(f"            url: {p['url']}")
     outputs = structure.get("outputs") or []
     if outputs:
         lines.append("outputs:")
@@ -179,7 +224,7 @@ def to_structure(categories: list[dict], ok: int, fail: int, pdf_count: int) -> 
                 if p.get("part") is not None:
                     entry = {"part": p["part"], **entry}
                 pdfs.append(entry)
-            books.append({"title": book["title"], "rank": book["rank"], "pdfs": pdfs})
+            books.append({"title": book["title"], "pdfs": pdfs})
         out_cats.append({"category": cat["category"], "books": books})
     return {
         "source": BASE_URL,
@@ -223,6 +268,8 @@ def main() -> int:
                 fail += 1
 
     structure = to_structure(categories, ok, fail, len(jobs))
+    n_ranks = enrich_pdf_ranks(structure)
+    print(f"Extracted difficulty from {n_ranks}/{structure['stats']['pdfs']} PDFs")
     preserved = load_preserved_outputs(YAML_PATH)
     if preserved:
         structure["outputs"] = preserved

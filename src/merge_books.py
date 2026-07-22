@@ -223,9 +223,8 @@ def plan_pages(catalog: dict, root: Path, toc_pages: int) -> tuple[list[dict], i
             book_entry = {
                 "kind": "book",
                 "title": book["title"],
-                "rank": book.get("rank"),
-                "parts": len(pdfs),
                 "page_index": idx,
+                "parts": [],
             }
             idx += 1  # book separator
             for pdf in pdfs:
@@ -233,7 +232,15 @@ def plan_pages(catalog: dict, root: Path, toc_pages: int) -> tuple[list[dict], i
                 if not path.exists():
                     missing.append(pdf["file"])
                     continue
+                part_page = idx
                 idx += _pdf_page_count(path)
+                book_entry["parts"].append(
+                    {
+                        "label": pdf.get("part"),
+                        "rank": pdf.get("rank"),
+                        "page_index": part_page,
+                    }
+                )
             cat_entry["books"].append(book_entry)
 
         entries.append(cat_entry)
@@ -243,6 +250,45 @@ def plan_pages(catalog: dict, root: Path, toc_pages: int) -> tuple[list[dict], i
 
     total = idx
     return entries, total
+
+
+def format_rank(rank: str | None) -> str | None:
+    """Turn catalog ranks like ``11k`` / ``1d`` into ``11 kyu`` / ``1 dan``."""
+    if not rank:
+        return None
+    m = re.fullmatch(r"\s*(\d+)\s*([kd])\s*", str(rank), flags=re.I)
+    if not m:
+        return str(rank).strip() or None
+    n, unit = m.group(1), m.group(2).lower()
+    return f"{n} {'kyu' if unit == 'k' else 'dan'}"
+
+
+def rank_strength(rank: str | None) -> int | None:
+    """Comparable strength: higher is stronger (30k … 1k … 1d … 9d)."""
+    if not rank:
+        return None
+    m = re.fullmatch(r"\s*(\d+)\s*([kd])\s*", str(rank), flags=re.I)
+    if not m:
+        return None
+    n, unit = int(m.group(1)), m.group(2).lower()
+    # kyu: weaker as number grows → negative. dan: positive.
+    return -n if unit == "k" else n
+
+
+def format_rank_range(ranks: list[str | None]) -> str | None:
+    """Weakest–strongest range in Go order, e.g. ``12 kyu – 8 kyu``."""
+    keyed: list[tuple[int, str]] = []
+    for r in ranks:
+        s = rank_strength(r)
+        if s is not None and r is not None:
+            keyed.append((s, str(r)))
+    if not keyed:
+        return None
+    keyed.sort(key=lambda t: t[0])
+    lo, hi = keyed[0][1], keyed[-1][1]
+    if lo == hi:
+        return format_rank(lo)
+    return f"{format_rank(lo)} – {format_rank(hi)}"
 
 
 def make_toc(entries: list[dict]) -> tuple[PdfReader, list[dict]]:
@@ -328,22 +374,25 @@ def make_toc(entries: list[dict]) -> tuple[PdfReader, list[dict]]:
         y -= 7.5 * mm
 
         for book in cat["books"]:
-            y, toc_page = ensure_space(y, 22 * mm, toc_page)
+            parts = book.get("parts") or []
+            multi = len(parts) > 1
+            # Leave room for part rows when the book is multi-volume.
+            need = 22 * mm + (len(parts) * 5.2 * mm if multi else 0)
+            y, toc_page = ensure_space(y, min(need, 40 * mm), toc_page)
 
-            rank = book.get("rank") or ""
+            rank_text = format_rank_range([p.get("rank") for p in parts])
             title = book["title"]
-            parts = book.get("parts") or 0
-            suffix = f"  ({parts} parts)" if parts > 1 else ""
-            label = f"({rank}) {title}{suffix}" if rank else f"{title}{suffix}"
+            label = f"{title} ({rank_text})" if rank_text else title
 
             c.setFont("Helvetica", 10)
-            # truncate if needed
-            while label and c.stringWidth(label, "Helvetica", 10) > title_max - left - 5 * mm:
+            max_label_w = title_max - left - 5 * mm
+            while label and c.stringWidth(label, "Helvetica", 10) > max_label_w:
                 label = label[:-2] + "…"
 
             c.setFillColor(INK)
-            c.drawString(left + 5 * mm, y, label)
-            text_end = left + 5 * mm + c.stringWidth(label, "Helvetica", 10)
+            book_x = left + 5 * mm
+            c.drawString(book_x, y, label)
+            text_end = book_x + c.stringWidth(label, "Helvetica", 10)
             page_label = str(book["page_index"] + 1)
             draw_leader(y, text_end, page_label)
 
@@ -355,6 +404,39 @@ def make_toc(entries: list[dict]) -> tuple[PdfReader, list[dict]]:
                 }
             )
             y -= 5.8 * mm
+
+            if multi:
+                for part in parts:
+                    y, toc_page = ensure_space(y, 20 * mm, toc_page)
+                    raw = part.get("label")
+                    if raw is None or str(raw).strip() == "":
+                        part_core = "Part"
+                    elif str(raw).lower().startswith("part"):
+                        part_core = str(raw)
+                    else:
+                        part_core = f"Part {raw}"
+                    part_rank = format_rank(part.get("rank"))
+                    part_label = (
+                        f"{part_core} ({part_rank})" if part_rank else part_core
+                    )
+
+                    c.setFont("Helvetica", 9)
+                    c.setFillColor(MUTED)
+                    part_x = left + 12 * mm
+                    c.drawString(part_x, y, part_label)
+                    text_end = part_x + c.stringWidth(part_label, "Helvetica", 9)
+                    page_label = str(part["page_index"] + 1)
+                    # Leaders/numbers stay 10pt for alignment with book rows.
+                    draw_leader(y, text_end, page_label)
+
+                    links.append(
+                        {
+                            "toc_page": toc_page,
+                            "rect": (left + 8 * mm, y - 2, right, y + 10),
+                            "target": part["page_index"],
+                        }
+                    )
+                    y -= 5.2 * mm
 
         y -= 3.5 * mm
 
@@ -400,7 +482,12 @@ def make_category_page(name: str, book_count: int, pdf_count: int) -> PdfReader:
     return _page_reader(buf)
 
 
-def make_book_page(title: str, rank: str | None, parts: int, category: str) -> PdfReader:
+def make_book_page(
+    title: str,
+    rank_display: str | None,
+    parts: int,
+    category: str,
+) -> PdfReader:
     c, buf = _new_page()
 
     c.setFillColor(MUTED)
@@ -436,10 +523,10 @@ def make_book_page(title: str, rank: str | None, parts: int, category: str) -> P
         c.drawCentredString(PAGE_W / 2, y, line)
         y -= 16 * mm
 
-    if rank:
+    if rank_display:
         c.setFillColor(ACCENT)
         c.setFont("Helvetica-Bold", 16)
-        c.drawCentredString(PAGE_W / 2, y - 4 * mm, f"Rank: {rank}")
+        c.drawCentredString(PAGE_W / 2, y - 4 * mm, rank_display)
         y -= 14 * mm
 
     if parts > 1:
@@ -695,11 +782,12 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
                     f"planned {book_plan['page_index']}",
                     file=sys.stderr,
                 )
+            rank_display = format_rank_range([p.get("rank") for p in pdfs])
             append_reader(
                 writer,
                 make_book_page(
                     book["title"],
-                    book.get("rank"),
+                    rank_display,
                     len(pdfs),
                     cat["category"],
                 ),
@@ -724,8 +812,9 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
                     missing.append(rel)
                     print(f"  [FAIL] {rel}: {e}", file=sys.stderr)
 
-            rank = book.get("rank")
-            label = f"({rank}) {book['title']}" if rank else book["title"]
+            label = (
+                f"{book['title']} ({rank_display})" if rank_display else book["title"]
+            )
             book_outlines.append((label, book_page))
 
         outlines.append((cat["category"], cat_page, book_outlines))

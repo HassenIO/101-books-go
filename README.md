@@ -69,9 +69,9 @@ categories:
   - category: Tesuji
     books:
       - title: Specialized Training in Tesuji
-        rank: 11k
         pdfs:
           - part: 1
+            rank: 11k    # from each PDF cover (Difficulty)
             file: docs/specialized-training-in-tesuji-1.pdf
             url: https://101books.github.io/pdfs/...
 

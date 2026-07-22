@@ -55,9 +55,9 @@ categories:
   - category: Tesuji|Tsumego|Endgame
     books:
       - title: string
-        rank: 11k|1d|…   # optional style from source
         pdfs:
-          - part: "1"    # only when multi-part
+          - part: "1"      # only when multi-part
+            rank: 11k|1d   # from PDF cover Difficulty; per part
             file: docs/….pdf
             url: https://…
 
@@ -66,6 +66,8 @@ outputs:
     books: [title, …]       # optional; omit/empty = all books
 ```
 
+- Ranks are **per PDF** (cover page), not the site list rank (wrong for multi-part).
+- TOC book lines show a Go-ordered range weak→strong (`12 kyu – 8 kyu`); parts show their own rank.
 - `outputs[].books` titles must match `categories[*].books[*].title` exactly.
 - Download **preserves** existing `outputs` when rewriting `books.yaml`.
 - Merge assumes `file` paths are relative to the repo root and exist after download.
