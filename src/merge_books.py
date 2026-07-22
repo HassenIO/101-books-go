@@ -197,15 +197,16 @@ def make_cover(catalog: dict) -> PdfReader:
         lines_t.append(cur)
     if not lines_t:
         lines_t = [title]
-    y_title = PAGE_H * 0.58 + (len(lines_t) - 1) * (font_size * 0.55)
+
+    title_line_gap = font_size * 1.15
+    title_block_h = len(lines_t) * title_line_gap
+    # Title centered in the upper half of the page.
+    title_top = PAGE_H * 0.72 + title_block_h / 2 - font_size * 0.2
+    y_title = title_top
     for line in lines_t:
         c.drawCentredString(PAGE_W / 2, y_title, line)
-        y_title -= font_size * 1.15
-
-    c.setStrokeColor(fg)
-    c.setLineWidth(1.2)
-    rule_y = y_title - 8
-    c.line(PAGE_W * 0.25, rule_y, PAGE_W * 0.75, rule_y)
+        y_title -= title_line_gap
+    title_bottom = y_title + title_line_gap * 0.35
 
     problems = stats.get("problems")
     if problems is None:
@@ -216,14 +217,25 @@ def make_cover(catalog: dict) -> PdfReader:
     if problems:
         detail_lines.append(f"{problems:,} GO PROBLEMS".replace(",", " "))
     if rank_range:
-        detail_lines.append(rank_range.upper())
+        detail_lines.append(f"FOR {rank_range.upper()} STUDENTS")
+
+    detail_gap = 22
+    detail_block_h = max(len(detail_lines), 1) * detail_gap
+    # Stats lower in the bottom half.
+    detail_top = PAGE_H * 0.34 + detail_block_h / 2
+    # Separation line midway between title block and stats block.
+    rule_y = (title_bottom + detail_top) / 2
+
+    c.setStrokeColor(fg)
+    c.setLineWidth(1.2)
+    c.line(PAGE_W * 0.25, rule_y, PAGE_W * 0.75, rule_y)
 
     c.setFillColor(fg)
     c.setFont("Helvetica", 12)
-    y = rule_y - 36
+    y = detail_top
     for line in detail_lines:
         c.drawCentredString(PAGE_W / 2, y, line)
-        y -= 22
+        y -= detail_gap
 
     c.showPage()
     c.save()
@@ -374,27 +386,65 @@ def make_part_title_page(
     c.rect(0, 0, PAGE_W, mid, fill=1, stroke=0)
 
     bottom_lines: list[tuple[str, str, float]] = []  # text, font, size
-    if problems is not None:
-        bottom_lines.append((f"Problems: {problems}", "Helvetica", 13))
     rank_text = format_rank(rank)
-    if rank_text:
-        bottom_lines.append((f"Difficulty: {rank_text}", "Helvetica", 13))
+    if problems is not None and rank_text:
+        bottom_lines.append(
+            (f"{problems} problems for {rank_text} students", "Helvetica", 13)
+        )
+    elif problems is not None:
+        bottom_lines.append((f"{problems} problems", "Helvetica", 13))
+    elif rank_text:
+        bottom_lines.append((f"For {rank_text} students", "Helvetica", 13))
     bottom_lines.append(("All problems are black to play", "Helvetica", 12))
-    if source_url:
-        bottom_lines.append((source_url, "Helvetica", 10))
 
+    qr_size = 21 * mm if source_url else 0  # 25% smaller than 28mm
+    qr_gap = 18 if source_url else 0
     row_gap = 22
-    block_h = len(bottom_lines) * row_gap
-    y = (mid + block_h) / 2 - 4
+    text_h = len(bottom_lines) * row_gap
+    # Keep text block centered; place QR lower with extra offset.
+    y = (mid + text_h) / 2 - 4
     c.setFillColor(INK)
     for text, font, size in bottom_lines:
         c.setFont(font, size)
         c.drawCentredString(PAGE_W / 2, y, text)
         y -= row_gap
 
+    if source_url:
+        qr_bottom = 36 * mm
+        _draw_qr_code(c, source_url, PAGE_W / 2, qr_bottom, qr_size)
+
     c.showPage()
     c.save()
     return _page_reader(buf)
+
+
+def _draw_qr_code(
+    c: canvas.Canvas,
+    data: str,
+    center_x: float,
+    bottom_y: float,
+    size: float,
+) -> None:
+    """Draw a vector QR code centered at ``center_x``, sitting on ``bottom_y``."""
+    import qrcode
+
+    qr = qrcode.QRCode(border=1, box_size=1, error_correction=qrcode.constants.ERROR_CORRECT_M)
+    qr.add_data(data)
+    qr.make(fit=True)
+    matrix = qr.get_matrix()
+    n = len(matrix)
+    if n == 0:
+        return
+    cell = size / n
+    x0 = center_x - size / 2
+    c.setFillColor(HexColor("#000000"))
+    for row_i, row in enumerate(matrix):
+        for col_i, dark in enumerate(row):
+            if not dark:
+                continue
+            # matrix row 0 is top of QR
+            y = bottom_y + size - (row_i + 1) * cell
+            c.rect(x0 + col_i * cell, y, cell + 0.05, cell + 0.05, fill=1, stroke=0)
 
 
 def _pdf_page_count(path: Path) -> int:
@@ -404,60 +454,87 @@ def _pdf_page_count(path: Path) -> int:
     return len(reader.pages)
 
 
-def plan_pages(catalog: dict, root: Path, toc_pages: int) -> tuple[list[dict], int]:
-    """Return TOC entries with 0-based page indices and total page count."""
-    # layout: [cover][toc x N][source PDFs only — no category/book separators]
-    idx = 1 + toc_pages
-    entries: list[dict] = []
+def make_blank_page() -> PdfReader:
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    c.setFillColor(HexColor("#ffffff"))
+    c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
+    c.showPage()
+    c.save()
+    return _page_reader(buf)
+
+
+def _iter_existing_parts(
+    catalog: dict, root: Path
+) -> tuple[list[tuple[dict, dict, dict, Path]], list[str]]:
+    """Ordered (cat, book, pdf, path) for PDFs that exist on disk."""
+    parts: list[tuple[dict, dict, dict, Path]] = []
     missing: list[str] = []
-
     for cat in catalog["categories"]:
-        cat_entry = {
-            "kind": "category",
-            "title": cat["category"],
-            "page_index": idx,  # first content page in this category
-            "books": [],
-        }
-
         for book in cat["books"]:
-            pdfs = book.get("pdfs") or []
-            book_entry = {
-                "kind": "book",
-                "title": book["title"],
-                "page_index": idx,  # first part / PDF of the book
-                "parts": [],
-            }
-            for pdf in pdfs:
+            for pdf in book.get("pdfs") or []:
                 path = root / pdf["file"]
                 if not path.exists():
                     missing.append(pdf["file"])
                     continue
-                part_page = idx
-                idx += _pdf_page_count(path)
+                parts.append((cat, book, pdf, path))
+    return parts, missing
+
+
+def plan_pages(catalog: dict, root: Path, toc_pages: int) -> tuple[list[dict], int]:
+    """Return TOC entries with 0-based page indices and total page count."""
+    # layout: [cover][toc x N][parts…] with a blank page after each part except last
+    idx = 1 + toc_pages
+    all_parts, missing = _iter_existing_parts(catalog, root)
+    n_parts = len(all_parts)
+
+    # page_index per (category, book title, part file) as we walk
+    part_pages: dict[tuple[str, str, str], int] = {}
+    for i, (cat, book, pdf, path) in enumerate(all_parts):
+        part_pages[(cat["category"], book["title"], pdf["file"])] = idx
+        idx += _pdf_page_count(path)
+        if i < n_parts - 1:
+            idx += 1  # blank page before next part
+
+    entries: list[dict] = []
+    for cat in catalog["categories"]:
+        cat_entry = {
+            "kind": "category",
+            "title": cat["category"],
+            "page_index": 1 + toc_pages,
+            "books": [],
+        }
+        for book in cat["books"]:
+            book_entry = {
+                "kind": "book",
+                "title": book["title"],
+                "page_index": 1 + toc_pages,
+                "parts": [],
+            }
+            for pdf in book.get("pdfs") or []:
+                key = (cat["category"], book["title"], pdf["file"])
+                if key not in part_pages:
+                    continue
                 book_entry["parts"].append(
                     {
                         "label": pdf.get("part"),
                         "rank": pdf.get("rank"),
-                        "page_index": part_page,
+                        "page_index": part_pages[key],
                     }
                 )
             if book_entry["parts"]:
                 book_entry["page_index"] = book_entry["parts"][0]["page_index"]
             cat_entry["books"].append(book_entry)
-
-        if cat_entry["books"]:
-            first_book = next(
-                (b for b in cat_entry["books"] if b.get("parts")),
-                cat_entry["books"][0],
-            )
-            cat_entry["page_index"] = first_book["page_index"]
+        for book_entry in cat_entry["books"]:
+            if book_entry["parts"]:
+                cat_entry["page_index"] = book_entry["parts"][0]["page_index"]
+                break
         entries.append(cat_entry)
 
     if missing:
         print(f"WARNING: missing while planning: {len(missing)} file(s)", file=sys.stderr)
 
-    total = idx
-    return entries, total
+    return entries, idx
 
 
 def format_rank(rank: str | None) -> str | None:
@@ -897,72 +974,77 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
     assert len(writer.pages) == front_matter
 
     missing: list[str] = []
+    all_parts, missing_plan = _iter_existing_parts(catalog, root)
+    missing.extend(missing_plan)
+    n_parts = len(all_parts)
 
-    for cat, cat_plan in zip(catalog["categories"], entries, strict=True):
-        books = cat["books"]
-        book_outlines: list[tuple[str, int]] = []
+    # Outline bookkeeping keyed like the plan
+    outline_books: dict[tuple[str, str], tuple[str, int]] = {}
+    outline_cats: dict[str, list[tuple[str, int]]] = {
+        cat["category"]: [] for cat in catalog["categories"]
+    }
+    cat_first_page: dict[str, int] = {}
 
-        for book, book_plan in zip(books, cat_plan["books"], strict=True):
-            pdfs = book.get("pdfs") or []
-            book_page = len(writer.pages)
-            if book_page != book_plan["page_index"]:
-                print(
-                    f"  WARNING: book {book['title']} at {book_page}, "
-                    f"planned {book_plan['page_index']}",
-                    file=sys.stderr,
-                )
-            rank_display = format_rank_range([p.get("rank") for p in pdfs])
-
-            multi = len(pdfs) > 1
-            for pdf in pdfs:
-                rel = pdf["file"]
-                path = root / rel
-                if not path.exists():
-                    missing.append(rel)
-                    print(f"  [MISS] {rel}", file=sys.stderr)
-                    continue
-                try:
-                    reader = PdfReader(str(path))
-                    if reader.is_encrypted:
-                        reader.decrypt("")
-                    start = len(writer.pages)
-                    source_url = pdf.get("url")
-                    subtitle = None
-                    try:
-                        cover_text = reader.pages[0].extract_text() or ""
-                        m = re.search(r"Source:\s*(\S+)", cover_text)
-                        if m:
-                            source_url = m.group(1).rstrip(".,;)")
-                        subtitle = extract_cover_subtitle(cover_text)
-                    except Exception:
-                        pass
-                    # Replace source cover with styled title page.
-                    title_reader = make_part_title_page(
-                        book["title"],
-                        pdf.get("part") if multi else None,
-                        pdf.get("rank"),
-                        pdf.get("problems"),
-                        source_url,
-                        background=part_bg,
-                        foreground=part_fg,
-                        subtitle=subtitle,
-                    )
-                    writer.add_page(title_reader.pages[0])
-                    title_pages.add(start)
-                    for pi in range(1, len(reader.pages)):
-                        writer.add_page(reader.pages[pi])
-                    source_pages.update(range(start, len(writer.pages)))
-                    print(f"  [OK] {rel} ({len(reader.pages)} pages)")
-                except Exception as e:
-                    missing.append(rel)
-                    print(f"  [FAIL] {rel}: {e}", file=sys.stderr)
-
-            label = (
-                f"{book['title']} ({rank_display})" if rank_display else book["title"]
+    for i, (cat, book, pdf, path) in enumerate(all_parts):
+        pdfs = book.get("pdfs") or []
+        multi = len(pdfs) > 1
+        rel = pdf["file"]
+        try:
+            reader = PdfReader(str(path))
+            if reader.is_encrypted:
+                reader.decrypt("")
+            start = len(writer.pages)
+            part_url = pdf.get("url")
+            subtitle = None
+            try:
+                cover_text = reader.pages[0].extract_text() or ""
+                subtitle = extract_cover_subtitle(cover_text)
+            except Exception:
+                pass
+            title_reader = make_part_title_page(
+                book["title"],
+                pdf.get("part") if multi else None,
+                pdf.get("rank"),
+                pdf.get("problems"),
+                part_url,
+                background=part_bg,
+                foreground=part_fg,
+                subtitle=subtitle,
             )
-            book_outlines.append((label, book_plan["page_index"]))
+            writer.add_page(title_reader.pages[0])
+            title_pages.add(start)
+            for pi in range(1, len(reader.pages)):
+                writer.add_page(reader.pages[pi])
+            source_pages.update(range(start, len(writer.pages)))
+            print(f"  [OK] {rel} ({len(reader.pages)} pages)")
 
-        outlines.append((cat["category"], cat_plan["page_index"], book_outlines))
+            key = (cat["category"], book["title"])
+            if key not in outline_books:
+                rank_display = format_rank_range(
+                    [p.get("rank") for p in pdfs]
+                )
+                label = (
+                    f"{book['title']} ({rank_display})"
+                    if rank_display
+                    else book["title"]
+                )
+                outline_books[key] = (label, start)
+                outline_cats[cat["category"]].append((label, start))
+                cat_first_page.setdefault(cat["category"], start)
+        except Exception as e:
+            missing.append(rel)
+            print(f"  [FAIL] {rel}: {e}", file=sys.stderr)
+            continue
+
+        if i < n_parts - 1:
+            writer.add_page(make_blank_page().pages[0])
+
+    for cat in catalog["categories"]:
+        name = cat["category"]
+        if name in cat_first_page:
+            outlines.append(
+                (name, cat_first_page[name], outline_cats.get(name, []))
+            )
 
     stamp_continuous_page_numbers(
         writer,
