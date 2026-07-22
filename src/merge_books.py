@@ -14,6 +14,8 @@ from pypdf.generic import ContentStream
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -222,6 +224,173 @@ def make_cover(catalog: dict) -> PdfReader:
     for line in detail_lines:
         c.drawCentredString(PAGE_W / 2, y, line)
         y -= 22
+
+    c.showPage()
+    c.save()
+    return _page_reader(buf)
+
+
+def _wrap_lines(
+    c: canvas.Canvas,
+    text: str,
+    font: str,
+    size: float,
+    max_w: float,
+) -> list[str]:
+    words = text.split()
+    lines: list[str] = []
+    cur = ""
+    for w in words:
+        trial = f"{cur} {w}".strip()
+        if c.stringWidth(trial, font, size) <= max_w:
+            cur = trial
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines or [text]
+
+
+_CJK_FONT_NAME: str | None = None
+_CJK_RE = re.compile(
+    r"[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff"
+    r"\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]"
+)
+
+
+def _ensure_cjk_font() -> str | None:
+    """Register a system CJK font for original-language subtitles."""
+    global _CJK_FONT_NAME
+    if _CJK_FONT_NAME is not None:
+        return _CJK_FONT_NAME or None
+    candidates = [
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/System/Library/Fonts/Supplemental/Songti.ttc",
+        "/Library/Fonts/Arial Unicode.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    ]
+    for path in candidates:
+        if not Path(path).exists():
+            continue
+        for idx in range(0, 6):
+            try:
+                name = "CoverCJK"
+                pdfmetrics.registerFont(TTFont(name, path, subfontIndex=idx))
+                _CJK_FONT_NAME = name
+                return name
+            except Exception:
+                continue
+    _CJK_FONT_NAME = ""
+    return None
+
+
+def extract_cover_subtitle(cover_text: str) -> str | None:
+    """Original-language line(s) between the English title and Problems."""
+    lines = [ln.strip() for ln in cover_text.splitlines() if ln.strip()]
+    subs: list[str] = []
+    for ln in lines:
+        if re.match(r"Problems\s*:", ln, flags=re.I):
+            break
+        if _CJK_RE.search(ln):
+            # Hangul sometimes extracts as spaced jamo — drop gaps.
+            if re.search(r"[\u1100-\u11ff\u3130-\u318f]", ln):
+                ln = re.sub(r"\s+", "", ln)
+            subs.append(ln)
+    if not subs:
+        return None
+    return " ".join(subs)
+
+
+def make_part_title_page(
+    book_title: str,
+    part_label: str | None,
+    rank: str | None,
+    problems: int | None,
+    source_url: str | None,
+    *,
+    background: HexColor,
+    foreground: HexColor,
+    subtitle: str | None = None,
+) -> PdfReader:
+    """First page of each part: colored top half + white bottom half."""
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    mid = PAGE_H / 2
+
+    # Top half — cover colors
+    c.setFillColor(background)
+    c.rect(0, mid, PAGE_W, mid, fill=1, stroke=0)
+
+    title_font = "Times-Bold"
+    title_size = 28 if len(book_title) > 32 else 32
+    max_w = PAGE_W - 40 * mm
+    title_lines = _wrap_lines(c, book_title, title_font, title_size, max_w)
+
+    part_no = None
+    if part_label is not None and str(part_label).strip() != "":
+        part_no = str(part_label).strip()
+        if part_no.lower().startswith("part"):
+            part_no = part_no[4:].strip()
+        if part_no:
+            part_no = f"Part {part_no}"
+
+    cjk_font = _ensure_cjk_font() if subtitle else None
+    sub_size = 32
+
+    line_gap = title_size * 1.15
+    block_h = len(title_lines) * line_gap
+    if part_no:
+        block_h += 18
+    # Title/part stay centered as a block; CJK sits lower, separate from that block.
+    y = mid + (mid + block_h) / 2 - title_size
+    c.setFillColor(foreground)
+    c.setFont(title_font, title_size)
+    for line in title_lines:
+        c.drawCentredString(PAGE_W / 2, y, line)
+        y -= line_gap
+    if part_no:
+        y -= 4
+        c.setFont("Helvetica", 14)
+        c.drawCentredString(PAGE_W / 2, y, part_no)
+        y -= 20
+    if subtitle and cjk_font:
+        # Below title/part, with comfortable gap (not flush to the midline).
+        y -= 36
+        c.setFont(cjk_font, sub_size)
+        size = sub_size
+        while size >= 14 and c.stringWidth(subtitle, cjk_font, size) > max_w:
+            size -= 1
+            c.setFont(cjk_font, size)
+        c.drawCentredString(PAGE_W / 2, y, subtitle)
+
+    # Bottom half — white, black type
+    c.setFillColor(HexColor("#ffffff"))
+    c.rect(0, 0, PAGE_W, mid, fill=1, stroke=0)
+
+    bottom_lines: list[tuple[str, str, float]] = []  # text, font, size
+    if problems is not None:
+        bottom_lines.append((f"Problems: {problems}", "Helvetica", 13))
+    rank_text = format_rank(rank)
+    if rank_text:
+        bottom_lines.append((f"Difficulty: {rank_text}", "Helvetica", 13))
+    bottom_lines.append(("All problems are black to play", "Helvetica", 12))
+    if source_url:
+        bottom_lines.append((source_url, "Helvetica", 10))
+
+    row_gap = 22
+    block_h = len(bottom_lines) * row_gap
+    y = (mid + block_h) / 2 - 4
+    c.setFillColor(INK)
+    for text, font, size in bottom_lines:
+        c.setFont(font, size)
+        c.drawCentredString(PAGE_W / 2, y, text)
+        y -= row_gap
 
     c.showPage()
     c.save()
@@ -631,11 +800,12 @@ def make_page_number_stamp(
     height: float,
     *,
     side: str,
+    color: HexColor | None = None,
 ) -> PdfReader:
     """Overlay a continuous page number in a header corner (`left` or `right`)."""
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(width, height))
-    c.setFillColor(HexColor("#000000"))
+    c.setFillColor(color if color is not None else HexColor("#000000"))
     c.setFont("Helvetica", 11)
     label = str(page_num)
     y = height - 57.6
@@ -652,17 +822,20 @@ def stamp_continuous_page_numbers(
     source_pages: set[int],
     *,
     front_matter: int,
+    title_pages: set[int] | None = None,
+    title_number_color: HexColor | None = None,
 ) -> None:
     """Renumber content pages 1..N; leave cover/TOC unnumbered."""
     total = len(writer.pages)
     content_count = max(0, total - front_matter)
     print(f"Stamping continuous page numbers (1–{content_count}) ...")
     rewritten = 0
+    title_pages = title_pages or set()
     # Only content pages may receive numbers.
     needs_overlay: set[int] = set(range(front_matter, total))
 
     for i in sorted(source_pages):
-        if i < front_matter:
+        if i < front_matter or i in title_pages:
             continue
         page_num = i - front_matter + 1
         if renumber_source_header(writer.pages[i], page_num):
@@ -671,14 +844,17 @@ def stamp_continuous_page_numbers(
 
     print(f"  rewrote headers on {rewritten} source pages")
 
-    # Title pages inside booklets (no header rewrite): Helvetica overlay.
+    # Title pages + any leftover pages without a rewritable header.
     for i in sorted(needs_overlay):
         page_num = i - front_matter + 1
         page = writer.pages[i]
         width = float(page.mediabox.width)
         height = float(page.mediabox.height)
         side = "left" if page_num % 2 == 0 else "right"
-        stamp = make_page_number_stamp(page_num, width, height, side=side)
+        color = title_number_color if i in title_pages else None
+        stamp = make_page_number_stamp(
+            page_num, width, height, side=side, color=color
+        )
         page.merge_page(stamp.pages[0])
 
 
@@ -687,7 +863,13 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
     writer = PdfWriter()
     outlines: list[tuple[str, int, list[tuple[str, int]]]] = []
     source_pages: set[int] = set()
+    title_pages: set[int] = set()
     volume_title = catalog.get("title") or "101 Go Books"
+    cover_cfg = catalog.get("cover") or {}
+    part_bg = _parse_hex_color(cover_cfg.get("background"), ACCENT) or ACCENT
+    part_fg = _parse_hex_color(cover_cfg.get("foreground"), HexColor("#ffffff")) or HexColor(
+        "#ffffff"
+    )
 
     # Two-pass plan so TOC can show real continuous page numbers.
     toc_pages = 1
@@ -731,6 +913,7 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
                 )
             rank_display = format_rank_range([p.get("rank") for p in pdfs])
 
+            multi = len(pdfs) > 1
             for pdf in pdfs:
                 rel = pdf["file"]
                 path = root / rel
@@ -743,7 +926,31 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
                     if reader.is_encrypted:
                         reader.decrypt("")
                     start = len(writer.pages)
-                    writer.append(reader)
+                    source_url = pdf.get("url")
+                    subtitle = None
+                    try:
+                        cover_text = reader.pages[0].extract_text() or ""
+                        m = re.search(r"Source:\s*(\S+)", cover_text)
+                        if m:
+                            source_url = m.group(1).rstrip(".,;)")
+                        subtitle = extract_cover_subtitle(cover_text)
+                    except Exception:
+                        pass
+                    # Replace source cover with styled title page.
+                    title_reader = make_part_title_page(
+                        book["title"],
+                        pdf.get("part") if multi else None,
+                        pdf.get("rank"),
+                        pdf.get("problems"),
+                        source_url,
+                        background=part_bg,
+                        foreground=part_fg,
+                        subtitle=subtitle,
+                    )
+                    writer.add_page(title_reader.pages[0])
+                    title_pages.add(start)
+                    for pi in range(1, len(reader.pages)):
+                        writer.add_page(reader.pages[pi])
                     source_pages.update(range(start, len(writer.pages)))
                     print(f"  [OK] {rel} ({len(reader.pages)} pages)")
                 except Exception as e:
@@ -757,7 +964,13 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
 
         outlines.append((cat["category"], cat_plan["page_index"], book_outlines))
 
-    stamp_continuous_page_numbers(writer, source_pages, front_matter=front_matter)
+    stamp_continuous_page_numbers(
+        writer,
+        source_pages,
+        front_matter=front_matter,
+        title_pages=title_pages,
+        title_number_color=part_fg,
+    )
     add_toc_links(writer, toc_start, toc_links)
 
     writer.add_outline_item("Cover", cover_page)
