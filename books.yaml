@@ -669,6 +669,7 @@ categories:
             url: https://101books.github.io/pdfs/guanzi-pu-endgame.pdf
 outputs:
   - title: "Tesuji's Path to Mastery"
+    size: A5
     cover:
       background: "#6d0b1b"
       foreground: "#ffffff"

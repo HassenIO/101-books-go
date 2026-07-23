@@ -65,6 +65,10 @@ categories:
 
 outputs:
   - title: string           # → output/<slug>.pdf
+    size: A4|A5|Letter|…    # optional print size (default A4)
+    cover:
+      background: "#rrggbb"
+      foreground: "#rrggbb"
     books: [title, …]       # optional; omit/empty = all books
 ```
 

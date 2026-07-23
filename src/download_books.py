@@ -206,6 +206,8 @@ def write_yaml(structure: dict, path: Path) -> None:
         lines.append("outputs:")
         for out in outputs:
             lines.append(f"  - title: {_yaml_escape(out['title'])}")
+            if out.get("size") is not None:
+                lines.append(f"    size: {_yaml_escape(str(out['size']))}")
             cover = out.get("cover") or {}
             if cover:
                 lines.append("    cover:")

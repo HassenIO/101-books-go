@@ -80,6 +80,10 @@ outputs:
   - title: "All 101 books"
   # books list → only those titles (must match category book titles)
   - title: "Road to Shodan: Tesujis"
+    size: A5                 # optional: A3/A4/A5/A6/B5/Letter/Legal/Tabloid (default A4)
+    cover:
+      background: "#6d0b1b"
+      foreground: "#ffffff"
     books:
       - "Specialized Training in Tesuji"
       - "Lee Chang-ho's Selected Tesuji"

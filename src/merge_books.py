@@ -6,11 +6,13 @@ from __future__ import annotations
 import io
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
-from pypdf import PdfReader, PdfWriter
+from pypdf import PageObject, PdfReader, PdfWriter, Transformation
 from pypdf.generic import ContentStream
+from reportlab.lib import pagesizes as rl_pagesizes
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -22,12 +24,56 @@ ROOT = Path(__file__).resolve().parent.parent
 YAML_PATH = ROOT / "books.yaml"
 OUTPUT_DIR = ROOT / "output"
 
-PAGE_W, PAGE_H = A4
 BG = HexColor("#fbf8f4")
 INK = HexColor("#333333")
 ACCENT = HexColor("#cc6666")
 MUTED = HexColor("#777777")
 RULE = HexColor("#ddcccc")
+
+# Source booklets are authored at A4; used to scale header overlays proportionally.
+_SOURCE_A4_W, _SOURCE_A4_H = A4
+
+_PAGE_SIZE_MAP: dict[str, tuple[float, float]] = {
+    "a3": rl_pagesizes.A3,
+    "a4": rl_pagesizes.A4,
+    "a5": rl_pagesizes.A5,
+    "a6": rl_pagesizes.A6,
+    "b5": rl_pagesizes.B5,
+    "letter": rl_pagesizes.LETTER,
+    "legal": rl_pagesizes.LEGAL,
+    "tabloid": rl_pagesizes.ELEVENSEVENTEEN,
+    "11x17": rl_pagesizes.ELEVENSEVENTEEN,
+    "halfletter": rl_pagesizes.HALF_LETTER,
+}
+
+
+@dataclass(frozen=True)
+class PageGeom:
+    """Target print page geometry for one output volume."""
+
+    w: float
+    h: float
+    name: str = "A4"
+
+    @property
+    def size(self) -> tuple[float, float]:
+        return (self.w, self.h)
+
+
+def resolve_page_size(spec: object | None) -> PageGeom:
+    """Parse outputs.size (default A4). Accepts A4/A5/Letter/… or [w, h] points."""
+    if spec is None or spec == "":
+        return PageGeom(_SOURCE_A4_W, _SOURCE_A4_H, "A4")
+    if isinstance(spec, (list, tuple)) and len(spec) == 2:
+        return PageGeom(float(spec[0]), float(spec[1]), "custom")
+    key = str(spec).strip().lower().replace(" ", "").replace("-", "")
+    if key in _PAGE_SIZE_MAP:
+        w, h = _PAGE_SIZE_MAP[key]
+        return PageGeom(w, h, str(spec).strip().upper())
+    raise ValueError(
+        f"Unknown page size {spec!r}. "
+        f"Try one of: {', '.join(sorted({k.upper() for k in _PAGE_SIZE_MAP}))}"
+    )
 
 
 def load_catalog(path: Path) -> dict:
@@ -35,17 +81,34 @@ def load_catalog(path: Path) -> dict:
         return yaml.safe_load(f)
 
 
-def _new_page() -> tuple[canvas.Canvas, io.BytesIO]:
+def _new_page(geom: PageGeom) -> tuple[canvas.Canvas, io.BytesIO]:
     buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
+    c = canvas.Canvas(buf, pagesize=geom.size)
     c.setFillColor(BG)
-    c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
+    c.rect(0, 0, geom.w, geom.h, fill=1, stroke=0)
     return c, buf
 
 
 def _page_reader(buf: io.BytesIO) -> PdfReader:
     buf.seek(0)
     return PdfReader(buf)
+
+
+def fit_page_to_geom(src_page, geom: PageGeom) -> PageObject:
+    """Scale and center a source page onto the target print size."""
+    sw = float(src_page.mediabox.width)
+    sh = float(src_page.mediabox.height)
+    if sw <= 0 or sh <= 0:
+        return src_page
+    scale = min(geom.w / sw, geom.h / sh)
+    tx = (geom.w - sw * scale) / 2
+    ty = (geom.h - sh * scale) / 2
+    dest = PageObject.create_blank_page(width=geom.w, height=geom.h)
+    dest.merge_transformed_page(
+        src_page,
+        Transformation().scale(scale).translate(tx, ty),
+    )
+    return dest
 
 
 def slugify(title: str) -> str:
@@ -138,6 +201,8 @@ def resolve_output_catalog(full_catalog: dict, output_spec: dict) -> dict:
         "categories": filtered,
         "title": output_spec["title"],
         "cover": output_spec.get("cover") or {},
+        "size": output_spec.get("size") or "A4",
+        "geom": resolve_page_size(output_spec.get("size")),
     }
 
 
@@ -164,24 +229,26 @@ def _parse_hex_color(value: str | None, default: HexColor | None = None) -> HexC
         return default
 
 
-def make_cover(catalog: dict) -> PdfReader:
+def make_cover(catalog: dict, geom: PageGeom) -> PdfReader:
     buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
+    c = canvas.Canvas(buf, pagesize=geom.size)
     stats = catalog.get("stats") or {}
     title = catalog.get("title") or "101 Go Books"
     cover_cfg = catalog.get("cover") or {}
     bg = _parse_hex_color(cover_cfg.get("background"), BG)
     fg = _parse_hex_color(cover_cfg.get("foreground"), INK)
+    page_w, page_h = geom.w, geom.h
+    scale = min(page_w / _SOURCE_A4_W, page_h / _SOURCE_A4_H)
 
     c.setFillColor(bg)
-    c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
+    c.rect(0, 0, page_w, page_h, fill=1, stroke=0)
 
     c.setFillColor(fg)
     # Serif title (Times-Bold is built into PDF viewers).
     font_name = "Times-Bold"
-    font_size = 32 if len(title) > 28 else 36
+    font_size = (32 if len(title) > 28 else 36) * scale
     c.setFont(font_name, font_size)
-    max_w = PAGE_W - 40 * mm
+    max_w = page_w - 40 * mm * scale
     words = title.split()
     lines_t: list[str] = []
     cur = ""
@@ -201,10 +268,10 @@ def make_cover(catalog: dict) -> PdfReader:
     title_line_gap = font_size * 1.15
     title_block_h = len(lines_t) * title_line_gap
     # Title centered in the upper half of the page.
-    title_top = PAGE_H * 0.72 + title_block_h / 2 - font_size * 0.2
+    title_top = page_h * 0.72 + title_block_h / 2 - font_size * 0.2
     y_title = title_top
     for line in lines_t:
-        c.drawCentredString(PAGE_W / 2, y_title, line)
+        c.drawCentredString(page_w / 2, y_title, line)
         y_title -= title_line_gap
     title_bottom = y_title + title_line_gap * 0.35
 
@@ -219,22 +286,22 @@ def make_cover(catalog: dict) -> PdfReader:
     if rank_range:
         detail_lines.append(f"FOR {rank_range.upper()} STUDENTS")
 
-    detail_gap = 22
+    detail_gap = 22 * scale
     detail_block_h = max(len(detail_lines), 1) * detail_gap
     # Stats lower in the bottom half.
-    detail_top = PAGE_H * 0.34 + detail_block_h / 2
+    detail_top = page_h * 0.34 + detail_block_h / 2
     # Separation line midway between title block and stats block.
     rule_y = (title_bottom + detail_top) / 2
 
     c.setStrokeColor(fg)
-    c.setLineWidth(1.2)
-    c.line(PAGE_W * 0.25, rule_y, PAGE_W * 0.75, rule_y)
+    c.setLineWidth(1.2 * scale)
+    c.line(page_w * 0.25, rule_y, page_w * 0.75, rule_y)
 
     c.setFillColor(fg)
-    c.setFont("Helvetica", 12)
+    c.setFont("Helvetica", 12 * scale)
     y = detail_top
     for line in detail_lines:
-        c.drawCentredString(PAGE_W / 2, y, line)
+        c.drawCentredString(page_w / 2, y, line)
         y -= detail_gap
 
     c.showPage()
@@ -329,19 +396,22 @@ def make_part_title_page(
     background: HexColor,
     foreground: HexColor,
     subtitle: str | None = None,
+    geom: PageGeom,
 ) -> PdfReader:
     """First page of each part: colored top half + white bottom half."""
     buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    mid = PAGE_H / 2
+    c = canvas.Canvas(buf, pagesize=geom.size)
+    page_w, page_h = geom.w, geom.h
+    scale = min(page_w / _SOURCE_A4_W, page_h / _SOURCE_A4_H)
+    mid = page_h / 2
 
     # Top half — cover colors
     c.setFillColor(background)
-    c.rect(0, mid, PAGE_W, mid, fill=1, stroke=0)
+    c.rect(0, mid, page_w, mid, fill=1, stroke=0)
 
     title_font = "Times-Bold"
-    title_size = 28 if len(book_title) > 32 else 32
-    max_w = PAGE_W - 40 * mm
+    title_size = (28 if len(book_title) > 32 else 32) * scale
+    max_w = page_w - 40 * mm * scale
     title_lines = _wrap_lines(c, book_title, title_font, title_size, max_w)
 
     part_no = None
@@ -353,65 +423,64 @@ def make_part_title_page(
             part_no = f"Part {part_no}"
 
     cjk_font = _ensure_cjk_font() if subtitle else None
-    sub_size = 32
+    sub_size = 32 * scale
 
     line_gap = title_size * 1.15
     block_h = len(title_lines) * line_gap
     if part_no:
-        block_h += 18
+        block_h += 18 * scale
     # Title/part stay centered as a block; CJK sits lower, separate from that block.
     y = mid + (mid + block_h) / 2 - title_size
     c.setFillColor(foreground)
     c.setFont(title_font, title_size)
     for line in title_lines:
-        c.drawCentredString(PAGE_W / 2, y, line)
+        c.drawCentredString(page_w / 2, y, line)
         y -= line_gap
     if part_no:
-        y -= 4
-        c.setFont("Helvetica", 14)
-        c.drawCentredString(PAGE_W / 2, y, part_no)
-        y -= 20
+        y -= 4 * scale
+        c.setFont("Helvetica", 14 * scale)
+        c.drawCentredString(page_w / 2, y, part_no)
+        y -= 20 * scale
     if subtitle and cjk_font:
         # Below title/part, with comfortable gap (not flush to the midline).
-        y -= 36
+        y -= 36 * scale
         c.setFont(cjk_font, sub_size)
         size = sub_size
-        while size >= 14 and c.stringWidth(subtitle, cjk_font, size) > max_w:
+        while size >= 14 * scale and c.stringWidth(subtitle, cjk_font, size) > max_w:
             size -= 1
             c.setFont(cjk_font, size)
-        c.drawCentredString(PAGE_W / 2, y, subtitle)
+        c.drawCentredString(page_w / 2, y, subtitle)
 
     # Bottom half — white, black type
     c.setFillColor(HexColor("#ffffff"))
-    c.rect(0, 0, PAGE_W, mid, fill=1, stroke=0)
+    c.rect(0, 0, page_w, mid, fill=1, stroke=0)
 
     bottom_lines: list[tuple[str, str, float]] = []  # text, font, size
     rank_text = format_rank(rank)
     if problems is not None and rank_text:
         bottom_lines.append(
-            (f"{problems} problems for {rank_text} students", "Helvetica", 13)
+            (f"{problems} problems for {rank_text} students", "Helvetica", 13 * scale)
         )
     elif problems is not None:
-        bottom_lines.append((f"{problems} problems", "Helvetica", 13))
+        bottom_lines.append((f"{problems} problems", "Helvetica", 13 * scale))
     elif rank_text:
-        bottom_lines.append((f"For {rank_text} students", "Helvetica", 13))
-    bottom_lines.append(("All problems are black to play", "Helvetica", 12))
+        bottom_lines.append((f"For {rank_text} students", "Helvetica", 13 * scale))
+    bottom_lines.append(("All problems are black to play", "Helvetica", 12 * scale))
 
-    qr_size = 21 * mm if source_url else 0  # 25% smaller than 28mm
-    qr_gap = 18 if source_url else 0
-    row_gap = 22
+    qr_size = 21 * mm * scale if source_url else 0
+    row_gap = 22 * scale
     text_h = len(bottom_lines) * row_gap
     # Keep text block centered; place QR lower with extra offset.
-    y = (mid + text_h) / 2 - 4
+    y = (mid + text_h) / 2 - 4 * scale
     c.setFillColor(INK)
     for text, font, size in bottom_lines:
         c.setFont(font, size)
-        c.drawCentredString(PAGE_W / 2, y, text)
+        c.drawCentredString(page_w / 2, y, text)
         y -= row_gap
 
     if source_url:
-        qr_bottom = 36 * mm
-        _draw_qr_code(c, source_url, PAGE_W / 2, qr_bottom, qr_size)
+        qr_bottom = 36 * mm * scale
+        _draw_qr_code(c, source_url, page_w / 2, qr_bottom, qr_size)
 
     c.showPage()
     c.save()
@@ -454,11 +523,11 @@ def _pdf_page_count(path: Path) -> int:
     return len(reader.pages)
 
 
-def make_blank_page() -> PdfReader:
+def make_blank_page(geom: PageGeom) -> PdfReader:
     buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
+    c = canvas.Canvas(buf, pagesize=geom.size)
     c.setFillColor(HexColor("#ffffff"))
-    c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
+    c.rect(0, 0, geom.w, geom.h, fill=1, stroke=0)
     c.showPage()
     c.save()
     return _page_reader(buf)
@@ -576,7 +645,9 @@ def format_rank_range(ranks: list[str | None]) -> str | None:
     return f"{format_rank(lo)} – {format_rank(hi)}"
 
 
-def make_toc(entries: list[dict], toc_pages: int) -> tuple[PdfReader, list[dict]]:
+def make_toc(
+    entries: list[dict], toc_pages: int, geom: PageGeom
+) -> tuple[PdfReader, list[dict]]:
     """Build TOC pages with dotted leaders and page numbers.
 
     Content page numbers start at 1 after cover + TOC (``toc_pages`` TOC sheets).
@@ -584,12 +655,14 @@ def make_toc(entries: list[dict], toc_pages: int) -> tuple[PdfReader, list[dict]
     ``{toc_page_index, rect, target_page_index}`` (TOC-local page index).
     """
     links: list[dict] = []
-    c, buf = _new_page()
+    c, buf = _new_page(geom)
+    page_w, page_h = geom.w, geom.h
+    scale = min(page_w / _SOURCE_A4_W, page_h / _SOURCE_A4_H)
 
-    left = 25 * mm
-    right = PAGE_W - 25 * mm
+    left = 25 * mm * scale
+    right = page_w - 25 * mm * scale
     page_col = right
-    title_max = right - 18 * mm
+    title_max = right - 18 * mm * scale
     # absolute index i → printed page i - toc_pages (content starts at 1)
     def printed_page(abs_index: int) -> int:
         return abs_index - toc_pages
@@ -598,22 +671,22 @@ def make_toc(entries: list[dict], toc_pages: int) -> tuple[PdfReader, list[dict]
         if not first:
             c.showPage()
             c.setFillColor(BG)
-            c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
+            c.rect(0, 0, page_w, page_h, fill=1, stroke=0)
         c.setFillColor(INK)
         if first:
-            c.setFont("Helvetica-Bold", 24)
-            c.drawString(left, PAGE_H - 30 * mm, "Contents")
+            c.setFont("Helvetica-Bold", 24 * scale)
+            c.drawString(left, page_h - 30 * mm * scale, "Contents")
             c.setStrokeColor(ACCENT)
-            c.setLineWidth(2)
-            c.line(left, PAGE_H - 34 * mm, left + 35 * mm, PAGE_H - 34 * mm)
-            return PAGE_H - 50 * mm
-        c.setFont("Helvetica-Bold", 12)
+            c.setLineWidth(2 * scale)
+            c.line(left, page_h - 34 * mm * scale, left + 35 * mm * scale, page_h - 34 * mm * scale)
+            return page_h - 50 * mm * scale
+        c.setFont("Helvetica-Bold", 12 * scale)
         c.setFillColor(MUTED)
-        c.drawString(left, PAGE_H - 22 * mm, "Contents")
+        c.drawString(left, page_h - 22 * mm * scale, "Contents")
         c.setStrokeColor(RULE)
-        c.setLineWidth(0.6)
-        c.line(left, PAGE_H - 26 * mm, right, PAGE_H - 26 * mm)
-        return PAGE_H - 38 * mm
+        c.setLineWidth(0.6 * scale)
+        c.line(left, page_h - 26 * mm * scale, right, page_h - 26 * mm * scale)
+        return page_h - 38 * mm * scale
 
     def ensure_space(y: float, need: float, toc_page: int) -> tuple[float, int]:
         if y < need:
@@ -622,19 +695,19 @@ def make_toc(entries: list[dict], toc_pages: int) -> tuple[PdfReader, list[dict]
         return y, toc_page
 
     def draw_leader(y: float, text_end: float, page_label: str) -> None:
-        c.setFont("Helvetica", 10)
-        num_w = c.stringWidth(page_label, "Helvetica", 10)
+        c.setFont("Helvetica", 10 * scale)
+        num_w = c.stringWidth(page_label, "Helvetica", 10 * scale)
         num_x = page_col - num_w
-        line_x0 = text_end + 4
-        line_x1 = num_x - 5
-        if line_x1 > line_x0 + 8:
+        line_x0 = text_end + 4 * scale
+        line_x1 = num_x - 5 * scale
+        if line_x1 > line_x0 + 8 * scale:
             c.setStrokeColor(RULE)
-            c.setLineWidth(0.6)
-            c.setDash(1, 3)
-            c.line(line_x0, y + 3, line_x1, y + 3)
+            c.setLineWidth(0.6 * scale)
+            c.setDash(1 * scale, 3 * scale)
+            c.line(line_x0, y + 3 * scale, line_x1, y + 3 * scale)
             c.setDash()
         c.setFillColor(INK)
-        c.setFont("Helvetica", 10)
+        c.setFont("Helvetica", 10 * scale)
         c.drawString(num_x, y, page_label)
 
     def draw_entry(
@@ -645,13 +718,13 @@ def make_toc(entries: list[dict], toc_pages: int) -> tuple[PdfReader, list[dict]
         target: int,
     ) -> tuple[float, int]:
         """One TOC row: main title (+ optional gray rank) … page number."""
-        y, toc_page = ensure_space(y, 20 * mm, toc_page)
-        main_font, main_size = "Helvetica", 10
-        rank_font, rank_size = "Helvetica", 8
+        y, toc_page = ensure_space(y, 20 * mm * scale, toc_page)
+        main_font, main_size = "Helvetica", 10 * scale
+        rank_font, rank_size = "Helvetica", 8 * scale
         c.setFont(main_font, main_size)
-        max_main = title_max - left - 5 * mm
+        max_main = title_max - left - 5 * mm * scale
         if rank_text:
-            max_main -= c.stringWidth(f"  {rank_text}", rank_font, rank_size) + 4
+            max_main -= c.stringWidth(f"  {rank_text}", rank_font, rank_size) + 4 * scale
         label = main_text
         while label and c.stringWidth(label, main_font, main_size) > max_main:
             label = label[:-2] + "…"
@@ -661,11 +734,11 @@ def make_toc(entries: list[dict], toc_pages: int) -> tuple[PdfReader, list[dict]
         c.drawString(x, y, label)
         text_end = x + c.stringWidth(label, main_font, main_size)
         if rank_text:
-            gap = 5
+            gap = 5 * scale
             c.setFillColor(MUTED)
             c.setFont(rank_font, rank_size)
             # Align rank near the main baseline.
-            c.drawString(text_end + gap, y + 0.5, rank_text)
+            c.drawString(text_end + gap, y + 0.5 * scale, rank_text)
             text_end = text_end + gap + c.stringWidth(rank_text, rank_font, rank_size)
 
         page_label = str(printed_page(target))
@@ -673,11 +746,11 @@ def make_toc(entries: list[dict], toc_pages: int) -> tuple[PdfReader, list[dict]
         links.append(
             {
                 "toc_page": toc_page,
-                "rect": (left, y - 2, right, y + 11),
+                "rect": (left, y - 2 * scale, right, y + 11 * scale),
                 "target": target,
             }
         )
-        return y - 5.8 * mm, toc_page
+        return y - 5.8 * mm * scale, toc_page
 
     toc_page = 0
     y = new_toc_page(first=True)
@@ -739,16 +812,17 @@ def append_reader(writer: PdfWriter, reader: PdfReader) -> int:
 
 
 # Source booklet headers (first BT…ET): page number left (even) or right (odd).
+# Allow optional whitespace inside arrays — pypdf may insert spaces when rewriting.
 _HEADER_NUM_LEFT = re.compile(
     rb"BT\s*"
-    rb"(/F\d+)\s+([\d.]+)\s+Tf\s+([\d.]+)\s+([\d.]+)\s+Td\s*\[\(\d+\)\]\s*TJ"
+    rb"(/F\d+)\s+([\d.]+)\s+Tf\s+([\d.]+)\s+([\d.]+)\s+Td\s*\[\s*\(\d+\)\s*\]\s*TJ"
     rb"(/F\d+\s+[\d.]+\s+Tf\s+)([\d.]+)\s+([\d.]+)\s+Td\s*(\[.*?\])\s*TJ\s*ET",
     re.S,
 )
 _HEADER_NUM_RIGHT = re.compile(
     rb"BT\s*"
     rb"(/F\d+\s+[\d.]+\s+Tf\s+)([\d.]+)\s+([\d.]+)\s+Td\s*(\[.*?\])\s*TJ"
-    rb"(/F\d+)\s+([\d.]+)\s+Tf\s+([\d.]+)\s+([\d.]+)\s+Td\s*\[\(\d+\)\]\s*TJ\s*ET",
+    rb"(/F\d+)\s+([\d.]+)\s+Tf\s+([\d.]+)\s+([\d.]+)\s+Td\s*\[\s*\(\d+\)\s*\]\s*TJ\s*ET",
     re.S,
 )
 
@@ -882,14 +956,16 @@ def make_page_number_stamp(
     """Overlay a continuous page number in a header corner (`left` or `right`)."""
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(width, height))
+    sx = width / _SOURCE_A4_W
+    sy = height / _SOURCE_A4_H
     c.setFillColor(color if color is not None else HexColor("#000000"))
-    c.setFont("Helvetica", 11)
+    c.setFont("Helvetica", 11 * min(sx, sy))
     label = str(page_num)
-    y = height - 57.6
+    y = height - 57.6 * sy
     if side == "left":
-        c.drawString(59.5, y, label)
+        c.drawString(59.5 * sx, y, label)
     else:
-        c.drawRightString(width - 59.5, y, label)
+        c.drawRightString(width - 59.5 * sx, y, label)
     c.save()
     return _page_reader(buf)
 
@@ -931,12 +1007,13 @@ def stamp_book_tabs(
     width = float(sample.mediabox.width)
     height = float(sample.mediabox.height)
 
-    margin_top = 36 * mm
-    margin_bottom = 36 * mm
+    scale = min(width / _SOURCE_A4_W, height / _SOURCE_A4_H)
+    margin_top = 36 * mm * scale
+    margin_bottom = 36 * mm * scale
     usable = height - margin_top - margin_bottom
     slot = usable / n
-    tab_h = min(30 * mm, max(14 * mm, slot * 0.78))
-    tab_w = 4.5 * mm
+    tab_h = min(30 * mm * scale, max(14 * mm * scale, slot * 0.78))
+    tab_w = 4.5 * mm * scale
 
     for bi, (start, end) in enumerate(book_ranges):
         # Top → bottom stacking.
@@ -968,6 +1045,7 @@ def stamp_continuous_page_numbers(
     front_matter: int,
     title_pages: set[int] | None = None,
     title_number_color: HexColor | None = None,
+    already_renumbered: set[int] | None = None,
 ) -> None:
     """Renumber content pages 1..N; leave cover/TOC unnumbered."""
     total = len(writer.pages)
@@ -975,20 +1053,22 @@ def stamp_continuous_page_numbers(
     print(f"Stamping continuous page numbers (1–{content_count}) ...")
     rewritten = 0
     title_pages = title_pages or set()
+    already_renumbered = already_renumbered or set()
     # Only content pages may receive numbers.
-    needs_overlay: set[int] = set(range(front_matter, total))
+    needs_overlay: set[int] = set(range(front_matter, total)) - already_renumbered
 
     for i in sorted(source_pages):
-        if i < front_matter or i in title_pages:
+        if i < front_matter or i in title_pages or i in already_renumbered:
             continue
         page_num = i - front_matter + 1
         if renumber_source_header(writer.pages[i], page_num):
             rewritten += 1
             needs_overlay.discard(i)
 
-    print(f"  rewrote headers on {rewritten} source pages")
+    print(f"  rewrote headers on {rewritten + len(already_renumbered)} source pages")
 
     # Title pages + any leftover pages without a rewritable header.
+    # Never overlay pages already renumbered in-stream (avoids double numbers).
     for i in sorted(needs_overlay):
         page_num = i - front_matter + 1
         page = writer.pages[i]
@@ -1008,32 +1088,35 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
     outlines: list[tuple[str, int, list[tuple[str, int]]]] = []
     source_pages: set[int] = set()
     title_pages: set[int] = set()
+    already_renumbered: set[int] = set()
     volume_title = catalog.get("title") or "101 Go Books"
     cover_cfg = catalog.get("cover") or {}
     part_bg = _parse_hex_color(cover_cfg.get("background"), ACCENT) or ACCENT
     part_fg = _parse_hex_color(cover_cfg.get("foreground"), HexColor("#ffffff")) or HexColor(
         "#ffffff"
     )
+    geom: PageGeom = catalog.get("geom") or resolve_page_size(catalog.get("size"))
+    print(f"  Page size: {geom.name} ({geom.w:.1f}×{geom.h:.1f} pt)")
 
     # Two-pass plan so TOC can show real continuous page numbers.
     toc_pages = 1
     entries: list[dict] = []
     for _ in range(5):
         entries, _total = plan_pages(catalog, root, toc_pages)
-        toc_reader, toc_links = make_toc(entries, toc_pages)
+        toc_reader, toc_links = make_toc(entries, toc_pages, geom)
         actual_toc_pages = len(toc_reader.pages)
         if actual_toc_pages == toc_pages:
             break
         toc_pages = actual_toc_pages
     else:
         entries, _total = plan_pages(catalog, root, toc_pages)
-        toc_reader, toc_links = make_toc(entries, toc_pages)
+        toc_reader, toc_links = make_toc(entries, toc_pages, geom)
         toc_pages = len(toc_reader.pages)
 
     n_books = sum(len(c["books"]) for c in entries)
     print(f"  TOC: {toc_pages} page(s), {n_books} books")
 
-    append_reader(writer, make_cover(catalog))
+    append_reader(writer, make_cover(catalog, geom))
     cover_page = 0
     toc_start = len(writer.pages)
     append_reader(writer, toc_reader)
@@ -1092,11 +1175,19 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
                 background=part_bg,
                 foreground=part_fg,
                 subtitle=subtitle,
+                geom=geom,
             )
             writer.add_page(title_reader.pages[0])
             title_pages.add(start)
             for pi in range(1, len(reader.pages)):
-                writer.add_page(reader.pages[pi])
+                # Renumber on the original A4 stream, then scale to print size.
+                # Doing this before fit avoids double numbers (overlay + original).
+                src_page = reader.pages[pi]
+                abs_idx = len(writer.pages)
+                page_num = abs_idx - front_matter + 1
+                if renumber_source_header(src_page, page_num):
+                    already_renumbered.add(abs_idx)
+                writer.add_page(fit_page_to_geom(src_page, geom))
             source_pages.update(range(start, len(writer.pages)))
             print(f"  [OK] {rel} ({len(reader.pages)} pages)")
 
@@ -1118,7 +1209,7 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
             continue
 
         if i < n_parts - 1:
-            writer.add_page(make_blank_page().pages[0])
+            writer.add_page(make_blank_page(geom).pages[0])
 
     _close_book_range(len(writer.pages))
 
@@ -1135,6 +1226,7 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
         front_matter=front_matter,
         title_pages=title_pages,
         title_number_color=part_fg,
+        already_renumbered=already_renumbered,
     )
     stamp_book_tabs(
         writer,
