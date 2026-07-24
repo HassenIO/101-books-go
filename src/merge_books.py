@@ -551,19 +551,36 @@ def _iter_existing_parts(
 
 
 def plan_pages(catalog: dict, root: Path, toc_pages: int) -> tuple[list[dict], int]:
-    """Return TOC entries with 0-based page indices and total page count."""
-    # layout: [cover][toc x N][parts…] with a blank page after each part except last
+    """Return TOC entries with 0-based page indices and total page count.
+
+    Layout rules (printed content pages start at 1 after cover+TOC):
+    - Part title pages are always on odd printed pages.
+    - A blank always follows each title so problem pages start on odd pages.
+    - An extra blank is inserted before a title when the previous content ended odd.
+    """
     idx = 1 + toc_pages
     all_parts, missing = _iter_existing_parts(catalog, root)
-    n_parts = len(all_parts)
 
-    # page_index per (category, book title, part file) as we walk
+    def printed(abs_idx: int) -> int:
+        return abs_idx - toc_pages
+
+    def ensure_odd_title() -> None:
+        nonlocal idx
+        if printed(idx) % 2 == 0:
+            idx += 1
+
     part_pages: dict[tuple[str, str, str], int] = {}
-    for i, (cat, book, pdf, path) in enumerate(all_parts):
+    for cat, book, pdf, path in all_parts:
+        ensure_odd_title()
         part_pages[(cat["category"], book["title"], pdf["file"])] = idx
-        idx += _pdf_page_count(path)
-        if i < n_parts - 1:
-            idx += 1  # blank page before next part
+        n = _pdf_page_count(path)
+        # title page
+        idx += 1
+        # blank after title (problems start next = odd)
+        idx += 1
+        # remaining problem pages (original PDF minus its cover)
+        content_pages = max(0, n - 1)
+        idx += content_pages
 
     entries: list[dict] = []
     for cat in catalog["categories"]:
@@ -1145,6 +1162,14 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
             book_ranges.append((range_start, end))
         range_key = None
 
+    def _printed(abs_idx: int) -> int:
+        return abs_idx - front_matter + 1
+
+    def _ensure_odd_title() -> None:
+        """Insert a blank so the next page is an odd printed page."""
+        if _printed(len(writer.pages)) % 2 == 0:
+            writer.add_page(make_blank_page(geom).pages[0])
+
     for i, (cat, book, pdf, path) in enumerate(all_parts):
         pdfs = book.get("pdfs") or []
         multi = len(pdfs) > 1
@@ -1154,11 +1179,14 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
             reader = PdfReader(str(path))
             if reader.is_encrypted:
                 reader.decrypt("")
+
+            _ensure_odd_title()
             start = len(writer.pages)
             if key != range_key:
                 _close_book_range(start)
                 range_key = key
                 range_start = start
+
             part_url = pdf.get("url")
             subtitle = None
             try:
@@ -1179,12 +1207,18 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
             )
             writer.add_page(title_reader.pages[0])
             title_pages.add(start)
+            # Blank after title so problem pages start on the next odd page.
+            writer.add_page(make_blank_page(geom).pages[0])
+
             for pi in range(1, len(reader.pages)):
-                # Renumber on the original A4 stream, then scale to print size.
-                # Doing this before fit avoids double numbers (overlay + original).
+                # Annotate + renumber on the original A4 stream, then scale.
                 src_page = reader.pages[pi]
                 abs_idx = len(writer.pages)
                 page_num = abs_idx - front_matter + 1
+                try:
+                    add_board_coordinates(src_page)
+                except Exception:
+                    pass
                 if renumber_source_header(src_page, page_num):
                     already_renumbered.add(abs_idx)
                 writer.add_page(fit_page_to_geom(src_page, geom))
@@ -1207,9 +1241,6 @@ def merge_one(catalog: dict, root: Path, output: Path) -> list[str]:
             missing.append(rel)
             print(f"  [FAIL] {rel}: {e}", file=sys.stderr)
             continue
-
-        if i < n_parts - 1:
-            writer.add_page(make_blank_page(geom).pages[0])
 
     _close_book_range(len(writer.pages))
 
