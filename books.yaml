@@ -683,3 +683,62 @@ outputs:
       - Fighting and Escaping
       - The Great Tesuji Encyclopedia
       - Segoe Tesuji Dictionary
+  - title: "Lee Chang-ho's Selected Tesuji"
+    size: A5
+    cover:
+      background: "#6d0b1b"
+      foreground: "#ffffff"
+    books:
+      - "Lee Chang-ho's Selected Tesuji"
+  - title: "Intense Tsumego Dojo"
+    size: A5
+    cover:
+      background: "#005a32"
+      foreground: "#ffffff"
+    books:
+      - Specialized Training in Capturing Races
+      - Specialized Training in Tsumego
+      - Go Puzzles at a Glance
+      - "Lee Chang-ho's Selected Tsumego"
+      - Compact Go Puzzles to Learn the Basics
+      - "Weiqi Life & Death 1000 Problems"
+      - Hitomi Tsumego
+      - 200 Selected Problems for Repetitive Practice
+      - 200 Basic Go Problems
+      - Ohashi-Style Power-Up Tsumego
+      - Bedtime Tsumego
+      - Ishida Yoshio Tsumego Challenge
+      - Fujisawa Shuko Classroom
+      - "Common Life & Death Problems"
+      - "Weiqi Life & Death Drills Beginner"
+      - Weiqi Small Leisure Collection
+      - Weiqi Rapid Drill 800
+      - Maeda Tsumego
+      - "Nie Weiping's Tsumego Encyclopedia"
+      - Segoe Tsumego Dictionary
+      - Hashimoto Masterpiece Collection
+      - Increase Your Fighting Strength at Go
+      - Go Seigen Tsumego Collection
+      - Xuanxuan Qijing
+      - "Weiqi Life & Death Drills Intermediate"
+      - Beautiful Dan-Level Tsumego 100
+      - Hashimoto Famous Creations
+      - Shikatsu Myoki
+      - Kada Katsuji Tsumego
+      - Showa Tsumego
+      - Heavenly Dragons
+      - Igo Hatsuyoron
+  - title: "Endgame Dojo"
+    size: A5
+    cover:
+      background: "#1c2c5c"
+      foreground: "#ffffff"
+    books:
+      - Go Endgame Techniques
+      - "Nie Weiping's Endgame Encyclopedia"
+      - "Lee Chang-ho's Endgame Techniques"
+      - New Korean Endgame Dictionary
+      - Sakata no Go Endgame
+      - Gokyo Seimyo Endgame
+      - Go Seigen Endgame
+      - Guanzi Pu Endgame
