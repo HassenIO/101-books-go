@@ -5,7 +5,7 @@ description = "Download and process 101 Go Books available for free"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "pypdf>=5.0",
+    "pypdf>=6.15.0",
     "pyyaml>=6.0",
     "qrcode>=8.0",
     "reportlab>=4.0",
